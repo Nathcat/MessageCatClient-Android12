@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">MessageCat</string>
+    <string name="loadingScreenText">Connecting...</string>
 </resources>
