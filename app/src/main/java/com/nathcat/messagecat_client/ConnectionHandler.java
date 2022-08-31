@@ -64,6 +64,7 @@ public class ConnectionHandler extends Handler {
             try {
                 // Try to connect to the server
                 this.s = new Socket("192.168.1.26", 1234);
+                this.s.setSoTimeout(20000);
                 this.oos = new ObjectOutputStream(s.getOutputStream());
                 this.ois = new ObjectInputStream(s.getInputStream());
 
@@ -80,6 +81,18 @@ public class ConnectionHandler extends Handler {
             assert this.s != null && this.oos != null && this.ois != null && this.keyPair != null && this.serverKeyPair != null;
             return;
         }
+        else if (msg.what == 2) {
+            try {
+                this.oos.close();
+                this.ois.close();
+                this.s.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            this.getLooper().quit();
+            return;
+        }
 
         // This point will only be reached if the 'what' parameter of the message is not 0
         // Get the request object from the message
@@ -89,7 +102,7 @@ public class ConnectionHandler extends Handler {
             // Send the request
             this.Send(this.serverKeyPair.encryptBigObject(request.request));
             // Receive the response and perform the callback from the request object
-            request.callback.callback(Result.SUCCESS, this.keyPair.decryptBigObject((EncryptedObject[]) this.Receive()));
+            request.callback.callback(Result.SUCCESS, ((ObjectContainer) this.keyPair.decryptBigObject((EncryptedObject[]) this.Receive())).obj);
 
         } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException e) {
             e.printStackTrace();
