@@ -7,6 +7,7 @@ import android.content.Intent;
 public class AutoStartService extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        context.startService(new Intent(context, NetworkerService.class));
+        context.startForegroundService(new Intent(context, NetworkerService.class));
+        //context.startService(new Intent(context, NetworkerService.class));
     }
 }

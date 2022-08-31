@@ -2,6 +2,8 @@ package com.nathcat.RSA;
 
 import java.io.*;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class EncryptedObject implements Serializable {
     public final boolean flipSign;   // Determine whether the sign should be flipped
@@ -77,35 +79,46 @@ public class EncryptedObject implements Serializable {
         }
     }
 
-    public static int[] byteToIntArray(byte[] objBytes) {
-        int[] objInts = new int[objBytes.length / 4];
-        int intCounter = 0;
-        for (int i = 0; i < objBytes.length - 4; i += 4) {
-            int currentInt = objBytes[i];
-            currentInt <<= 24;
-            currentInt += objBytes[i + 1];
-            currentInt <<= 16;
-            currentInt += objBytes[i + 2];
-            currentInt <<= 8;
-            currentInt += objBytes[i + 3];
-            objInts[intCounter] = currentInt;
-            intCounter++;
+    public static BigInteger[] ObjectToNumArray(Object obj) {
+        byte[] byteArray = EncryptedObject.SerializeObject(obj);
+        assert byteArray != null;
+
+        byte[] currentNum = new byte[256];
+        ArrayList<BigInteger> numArrayList = new ArrayList<>();
+
+        for (int i = 0; i < byteArray.length; i++) {
+            currentNum[i % 256] = byteArray[i];
+
+            if ((i + 1) % 256 == 0) {
+                numArrayList.add(new BigInteger(currentNum));
+                currentNum = new byte[256];
+            }
         }
 
-        return objInts;
+        if (byteArray.length % 256 != 0) {
+            numArrayList.add(new BigInteger(currentNum));
+        }
+
+        Object[] arr = numArrayList.toArray();
+        BigInteger[] result = new BigInteger[arr.length];
+        for (int i = 0; i < arr.length; i++) {
+            result[i] = (BigInteger) arr[i];
+        }
+
+        return result;
     }
 
-    public static byte[] intToByteArray(int[] objInts) {
-        byte[] objBytes = new byte[objInts.length * 4];
+    public static Object NumArrayToObject(BigInteger[] arr) {
+        byte[] byteArray = new byte[arr.length * 256];
         int byteCounter = 0;
-        for (int i = 0; i < objInts.length; i++) {
-            objBytes[byteCounter] = (byte) (objInts[i] >> 24);
-            objBytes[byteCounter + 1] = (byte) (objInts[i] >> 16);
-            objBytes[byteCounter + 2] = (byte) (objInts[i] >> 8);
-            objBytes[byteCounter + 3] = (byte) objInts[i];
-            byteCounter += 4;
+        for (BigInteger num : arr) {
+            byte[] currentNum = num.toByteArray();
+            for (int i = 0; i < currentNum.length; i++) {
+                byteArray[byteCounter] = currentNum[i];
+                byteCounter++;
+            }
         }
 
-        return objBytes;
+        return EncryptedObject.DeserializeObject(byteArray);
     }
 }

@@ -114,32 +114,43 @@ public class KeyPair implements Serializable {
         return message.GetObject();
     }
 
+    /**
+     * Encrypt a large object.
+     * @param message The object to encrypt
+     * @return Array of encrypted objects
+     * @throws PublicKeyException Thrown if the public key on this obejct is null
+     */
     public EncryptedObject[] encryptBigObject(Object message) throws PublicKeyException {
         if (this.pub == null) {
             throw new PublicKeyException();
         }
 
-        byte[] byteArray = EncryptedObject.SerializeObject(message);
-        assert byteArray != null;
-        EncryptedObject[] result = new EncryptedObject[byteArray.length];
-
-        for (int i = 0; i < byteArray.length; i++) {
-            result[i] = this.encrypt(byteArray[i]);
+        ObjectContainer container = new ObjectContainer(message);
+        BigInteger[] numArray = EncryptedObject.ObjectToNumArray(container);
+        EncryptedObject[] result = new EncryptedObject[numArray.length];
+        for (int i = 0; i < numArray.length; i++) {
+            result[i] = this.encrypt(numArray[i]);
         }
 
         return result;
     }
 
+    /**
+     * Decrypt a large object
+     * @param message The array of encrypted objects you wish to decrypt
+     * @return The resulting object
+     * @throws PrivateKeyException Thrown if the private key on this object is null
+     */
     public Object decryptBigObject(EncryptedObject[] message) throws PrivateKeyException {
         if (this.pri == null) {
             throw new PrivateKeyException();
         }
 
-        byte[] plain = new byte[message.length];
+        BigInteger[] numArray = new BigInteger[message.length];
         for (int i = 0; i < message.length; i++) {
-            plain[i] = (byte) this.decrypt(message[i]);
+            numArray[i] = (BigInteger) this.decrypt(message[i]);
         }
 
-        return EncryptedObject.DeserializeObject(plain);
+        return ((ObjectContainer) EncryptedObject.NumArrayToObject(numArray)).obj;
     }
 }

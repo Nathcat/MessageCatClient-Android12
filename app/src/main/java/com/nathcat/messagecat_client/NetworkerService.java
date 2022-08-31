@@ -1,5 +1,7 @@
 package com.nathcat.messagecat_client;
 
+import android.app.IntentService;
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
@@ -8,6 +10,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -17,6 +20,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import com.nathcat.RSA.ObjectContainer;
 import com.nathcat.messagecat_database.MessageQueue;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
@@ -31,6 +35,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.Date;
 
 /**
@@ -38,7 +43,7 @@ import java.util.Date;
  *
  * @author Nathan "Nathcat" Baines
  */
-public class NetworkerService extends Service {
+public class NetworkerService extends Service implements Serializable {
     /**
      * Used to manage notifications.
      * All notifications will be sent through this class
@@ -70,7 +75,7 @@ public class NetworkerService extends Service {
                     .setSmallIcon(R.drawable.ic_launcher_foreground)  // TODO Change this to app logo
                     .setContentTitle(title)
                     .setContentText(message)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+                    .setPriority(NotificationManagerCompat.IMPORTANCE_HIGH);
 
             NotificationManagerCompat manager = NotificationManagerCompat.from(NetworkerService.this);
             manager.notify(0, builder.build());
@@ -80,7 +85,7 @@ public class NetworkerService extends Service {
     /**
      * Passed to the active ConnectionHandler, contains request object and a callback
      */
-    public class Request {
+    public static class Request {
         public final IRequestCallback callback;  // The callback to be performed when a response is received
         public final Object request;             // The request object
 
@@ -152,7 +157,7 @@ public class NetworkerService extends Service {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetFriendRequests);
                 request.put("selector", "recipientID");
-                request.put("data", new FriendRequest(-1, -1, user.UserID, -1));
+                request.put("data", new ObjectContainer(new FriendRequest(0, 0, user.UserID, 0)));
 
                 long finalLastCheckedTime = lastCheckedTime;
 
@@ -162,23 +167,25 @@ public class NetworkerService extends Service {
                         waitingForResponse = false;
 
                         FriendRequest[] friendRequests = (FriendRequest[]) response;
-                        // Check if any of the requests are new
-                        for (FriendRequest fr : friendRequests) {
-                            if (fr.TimeSent > finalLastCheckedTime) {
-                                // Get the sender and send a notification
-                                JSONObject senderRequest = new JSONObject();
-                                senderRequest.put("type", RequestType.GetUser);
-                                senderRequest.put("selector", "id");
-                                senderRequest.put("data", new User(fr.SenderID, null, null, null, null, null));
+                        if (friendRequests != null) {
+                            // Check if any of the requests are new
+                            for (FriendRequest fr : friendRequests) {
+                                if (fr.TimeSent > finalLastCheckedTime) {
+                                    // Get the sender and send a notification
+                                    JSONObject senderRequest = new JSONObject();
+                                    senderRequest.put("type", RequestType.GetUser);
+                                    senderRequest.put("selector", "id");
+                                    senderRequest.put("data", new ObjectContainer(new User(fr.SenderID, "", "", "", "", "")));
 
-                                SendRequest(new Request(new IRequestCallback() {
-                                    @Override
-                                    public void callback(Result result, Object response) {
-                                        waitingForResponse = false;
+                                    SendRequest(new Request(new IRequestCallback() {
+                                        @Override
+                                        public void callback(Result result, Object response) {
+                                            waitingForResponse = false;
 
-                                        notificationChannel.showNotification("You got a friend request!", ((User) response).DisplayName + " wants to be friends!");
-                                    }
-                                }, senderRequest));
+                                            notificationChannel.showNotification("You got a friend request!", ((User) response).DisplayName + " wants to be friends!");
+                                        }
+                                    }, senderRequest));
+                                }
                             }
                         }
                     }
@@ -188,7 +195,7 @@ public class NetworkerService extends Service {
                 request = new JSONObject();
                 request.put("type", RequestType.GetChatInvite);
                 request.put("selector", "recipientID");
-                request.put("data", new ChatInvite(-1, -1, -1, user.UserID, -1, -1));
+                request.put("data", new ObjectContainer(new ChatInvite(0, 0, 0, user.UserID, 0, 0)));
 
                 SendRequest(new Request(new IRequestCallback() {
                     @Override
@@ -196,23 +203,26 @@ public class NetworkerService extends Service {
                         waitingForResponse = false;
 
                         ChatInvite[] chatInvites = (ChatInvite[]) response;
-                        // Check if any of the requests are new
-                        for (ChatInvite ci : chatInvites) {
-                            if (ci.TimeSent > finalLastCheckedTime) {
-                                // Get the sender and send a notification
-                                JSONObject senderRequest = new JSONObject();
-                                senderRequest.put("type", RequestType.GetUser);
-                                senderRequest.put("selector", "id");
-                                senderRequest.put("data", new User(ci.SenderID, null, null, null, null, null));
 
-                                SendRequest(new Request(new IRequestCallback() {
-                                    @Override
-                                    public void callback(Result result, Object response) {
-                                        waitingForResponse = false;
+                        if (chatInvites != null) {
+                            // Check if any of the requests are new
+                            for (ChatInvite ci : chatInvites) {
+                                if (ci.TimeSent > finalLastCheckedTime) {
+                                    // Get the sender and send a notification
+                                    JSONObject senderRequest = new JSONObject();
+                                    senderRequest.put("type", RequestType.GetUser);
+                                    senderRequest.put("selector", "id");
+                                    senderRequest.put("data", new ObjectContainer(new User(ci.SenderID, "", "", "", "", "")));
 
-                                        notificationChannel.showNotification("You were invited to a Chat!", ((User) response).DisplayName + " wants to chat with you!");
-                                    }
-                                }, senderRequest));
+                                    SendRequest(new Request(new IRequestCallback() {
+                                        @Override
+                                        public void callback(Result result, Object response) {
+                                            waitingForResponse = false;
+
+                                            notificationChannel.showNotification("You were invited to a Chat!", ((User) response).DisplayName + " wants to chat with you!");
+                                        }
+                                    }, senderRequest));
+                                }
                             }
                         }
                     }
@@ -222,48 +232,50 @@ public class NetworkerService extends Service {
                 try {
                     ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
                     Chat[] chats = (Chat[]) ois.readObject();
-                    ois.close();
+                    if (chats != null) {
+                        // Get the message queues for each of the chats
+                        for (int i = 0; i < chats.length; i++) {
+                            request = new JSONObject();
+                            request.put("type", RequestType.GetMessageQueue);
+                            request.put("data", new ObjectContainer(chats[i].ChatID));
 
-                    // Get the message queues for each of the chats
-                    for (int i = 0; i < chats.length; i++) {
-                        request = new JSONObject();
-                        request.put("type", RequestType.GetMessageQueue);
-                        request.put("data", chats[i].ChatID);
+                            SendRequest(new Request(new IRequestCallback() {
+                                @Override
+                                public void callback(Result result, Object response) {
+                                    waitingForResponse = false;
+                                    // Get the messages in the message queue as a JSON string
+                                    String[] messageStrings = ((MessageQueue) response).GetJSONString();
+                                    for (String messageString : messageStrings) {
+                                        try {
+                                            // Parse the JSON string and request the sender
+                                            JSONObject messageJSON = (JSONObject) new JSONParser().parse(messageString);
+                                            // Check if the message has arrived since the last check time
+                                            if ((long) messageJSON.get("TimeSent") > finalLastCheckedTime) {
+                                                JSONObject senderRequest = new JSONObject();
+                                                senderRequest.put("type", RequestType.GetUser);
+                                                senderRequest.put("selector", "id");
+                                                senderRequest.put("data", new ObjectContainer(new User((int) messageJSON.get("SenderID"), "", "", "", "", "")));
 
-                        SendRequest(new Request(new IRequestCallback() {
-                            @Override
-                            public void callback(Result result, Object response) {
-                                waitingForResponse = false;
-                                // Get the messages in the message queue as a JSON string
-                                String[] messageStrings = ((MessageQueue) response).GetJSONString();
-                                for (String messageString : messageStrings) {
-                                    try {
-                                        // Parse the JSON string and request the sender
-                                        JSONObject messageJSON = (JSONObject) new JSONParser().parse(messageString);
-                                        // Check if the message has arrived since the last check time
-                                        if ((long) messageJSON.get("TimeSent") > finalLastCheckedTime) {
-                                            JSONObject senderRequest = new JSONObject();
-                                            senderRequest.put("type", RequestType.GetUser);
-                                            senderRequest.put("selector", "id");
-                                            senderRequest.put("data", new User((int) messageJSON.get("SenderID"), null, null, null, null, null));
+                                                SendRequest(new Request(new IRequestCallback() {
+                                                    @Override
+                                                    public void callback(Result result, Object response) {
+                                                        waitingForResponse = false;
+                                                        // Send a notification
+                                                        notificationChannel.showNotification("You have a new message!", ((User) response).DisplayName + " sent you a message!");
+                                                    }
+                                                }, senderRequest));
+                                            }
 
-                                            SendRequest(new Request(new IRequestCallback() {
-                                                @Override
-                                                public void callback(Result result, Object response) {
-                                                    waitingForResponse = false;
-                                                    // Send a notification
-                                                    notificationChannel.showNotification("You have a new message!", ((User) response).DisplayName + " sent you a message!");
-                                                }
-                                            }, senderRequest));
+                                        } catch (ParseException e) {
+                                            e.printStackTrace();
                                         }
-
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
                                     }
                                 }
-                            }
-                        }, request));
+                            }, request));
+                        }
                     }
+
+                    ois.close();
 
                 } catch (IOException | ClassNotFoundException e) {
                     e.printStackTrace();
@@ -310,22 +322,53 @@ public class NetworkerService extends Service {
      */
     @Override
     public void onCreate() {
-        try {
-            ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
-            oos.writeObject(new Chat[] {new Chat(1, null, null, -1), new Chat(2, null, null, -1)});
-            oos.flush();
-            oos.close();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
         // Create the notification channel
         notificationChannel = new NotificationChannel(
                 "MessageCatNotificationChannel",
                 "Notification channel used to send notifications to the user about things that happen in the app."
         );
 
+        startForeground(1, new Notification.Builder(this, notificationChannel.channelName)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("MessageCat")
+                .setContentText("MessageCat service is running")
+                .setPriority(Notification.PRIORITY_HIGH)
+                .build());
+
+        startConnectionHandler();
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_NOT_STICKY;
+    }
+
+    /**
+     * Send a request to the server
+     * @param request The request object
+     */
+    public void SendRequest(Request request) {
+        this.waitingForResponse = true;  // Indicate that the client is waiting for a response
+        // Create the message to the connection handler
+        Message msg = connectionHandler.obtainMessage();
+        msg.obj = request;
+        msg.what = 1;
+        // Send the request to the connection handler to be sent off to the server
+        connectionHandler.sendMessage(msg);
+    }
+
+    @Override
+    public void onTaskRemoved(Intent intent) {
+        System.out.println("Service task removed");
+    }
+
+    @Override
+    public void onDestroy() {
+        connectionHandler.sendEmptyMessage(2);
+        System.out.println("Service destroyed");
+    }
+
+    public void startConnectionHandler() {
         // Create the connection handler thread
         HandlerThread thread = new HandlerThread("MessageCatNetworkingHandlerThread", 10);
         thread.start();
@@ -348,12 +391,24 @@ public class NetworkerService extends Service {
                 // Create the request and send it to the server
                 JSONObject requestData = new JSONObject();
                 requestData.put("type", RequestType.Authenticate);
-                requestData.put("data", userData);
+                requestData.put("data", new ObjectContainer(userData));
 
                 // Send the authentication request
                 this.SendRequest(new Request(new IRequestCallback() {
                     @Override
                     public void callback(Result result, Object response) {
+                        if (result == Result.FAILED) {
+                            startConnectionHandler();
+                            return;
+                        }
+
+                        if (response.getClass() == String.class) {
+                            authenticated = false;
+                            waitingForResponse = false;
+                            Toast.makeText(NetworkerService.this, "Finished auth", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
                         // If authentication was successful...
                         if (result == Result.SUCCESS) {
                             authenticated = true;
@@ -370,6 +425,10 @@ public class NetworkerService extends Service {
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
+
+                            NotifierRoutine notifierRoutine = new NotifierRoutine();
+                            notifierRoutine.setDaemon(true);
+                            notifierRoutine.start();
                         }
 
                         waitingForResponse = false;
@@ -380,29 +439,5 @@ public class NetworkerService extends Service {
                 e.printStackTrace();
             }
         }
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        // Called when the service is started
-        NotifierRoutine notifierRoutine = new NotifierRoutine();
-        notifierRoutine.setDaemon(true);
-        notifierRoutine.start();
-
-        return START_STICKY;
-    }
-
-    /**
-     * Send a request to the server
-     * @param request The request object
-     */
-    public void SendRequest(Request request) {
-        this.waitingForResponse = true;  // Indicate that the client is waiting for a response
-        // Create the message to the connection handler
-        Message msg = connectionHandler.obtainMessage();
-        msg.obj = request;
-        msg.what = 1;
-        // Send the request to the connection handler to be sent off to the server
-        connectionHandler.sendMessage(msg);
     }
 }

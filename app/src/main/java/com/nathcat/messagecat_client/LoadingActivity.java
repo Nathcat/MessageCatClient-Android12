@@ -3,6 +3,7 @@ package com.nathcat.messagecat_client;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -29,11 +30,10 @@ public class LoadingActivity extends AppCompatActivity {
 
             if (networkerService.authenticated) {
                 // TODO This is a debug message
-                ((Activity) LoadingActivity.this).runOnUiThread(() -> Toast.makeText(LoadingActivity.this, "Auth success", Toast.LENGTH_SHORT).show());
+                networkerService.notificationChannel.showNotification("MessageCat", "Auth success");
             }
             else {
-                // TODO This is also a debug message
-                ((Activity) LoadingActivity.this).runOnUiThread(() -> Toast.makeText(LoadingActivity.this, "Auth failed", Toast.LENGTH_SHORT).show());
+                startActivity(new Intent(LoadingActivity.this, NewUserActivity.class));
             }
         }
     }
@@ -51,9 +51,6 @@ public class LoadingActivity extends AppCompatActivity {
             // Get the service instance
             networkerService = ((NetworkerService.NetworkerServiceBinder) iBinder).getService();
             bound = true;
-
-            // TODO Debug message
-            Toast.makeText(LoadingActivity.this, "Bound to service", Toast.LENGTH_SHORT).show();
 
             // Wait for authentication to complete
             new WaitForAuthThread().start();
@@ -79,20 +76,32 @@ public class LoadingActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_loading);
 
+        // Check if the networker service is not running
+        if (!isServiceRunning(NetworkerService.class)) {
+            // Start the foreground service
+            startForegroundService(new Intent(this, NetworkerService.class));
+        }
+
         // Try to bind to the networker service
         bindService(
                 new Intent(this, NetworkerService.class),  // The intent to bind with
                 networkerServiceConnection,                            // The ServiceConnection object to use
                 Context.BIND_AUTO_CREATE                               // If the service does not already exist, create it
         );
+    }
 
-        if (!bound) {
-            startService(new Intent(this, NetworkerService.class));
-            bindService(
-                    new Intent(this, NetworkerService.class),  // The intent to bind with
-                    networkerServiceConnection,                            // The ServiceConnection object to use
-                    Context.BIND_AUTO_CREATE                               // If the service does not already exist, create it
-            );
+    /**
+     * Check if a service is running
+     * @param serviceClass The class of the service
+     * @return boolean
+     */
+    private boolean isServiceRunning(Class<?> serviceClass) {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                return true;
+            }
         }
+        return false;
     }
 }
