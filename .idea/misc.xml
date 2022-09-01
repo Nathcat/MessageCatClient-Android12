@@ -3,6 +3,8 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/drawable/chat_fragment_border.xml" value="0.3225" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/drawable/side_nav_bar.xml" value="0.3225" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/activity_app_bar.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/activity_app_bar2.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/activity_chats.xml" value="0.40217391304347827" />
@@ -11,10 +13,15 @@
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/app_bar_main.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/content_app_bar.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/content_chats.xml" value="0.40217391304347827" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/content_main.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/fragment_chat.xml" value="0.40217391304347827" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/fragment_chats.xml" value="0.40217391304347827" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/fragment_find_people.xml" value="0.40217391304347827" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/fragment_user_search.xml" value="0.8" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/layout/nav_header_main.xml" value="0.40217391304347827" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/menu/activity_main_drawer.xml" value="0.4" />
         <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/menu/drawer_menu.xml" value="0.4041666666666667" />
+        <entry key="..\:/Users/super/Documents/GitHub/MessageCatClient/app/src/main/res/menu/main.xml" value="0.4041666666666667" />
       </map>
     </option>
   </component>

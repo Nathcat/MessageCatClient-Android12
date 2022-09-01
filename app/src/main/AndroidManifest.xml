@@ -17,6 +17,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MessageCat">
         <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="@string/title_activity_main"
+            android:theme="@style/Theme.MessageCat.NoActionBar" />
+        <activity
             android:name=".NewUserActivity"
             android:exported="false" />
 

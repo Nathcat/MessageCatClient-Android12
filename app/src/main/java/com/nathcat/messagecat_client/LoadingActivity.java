@@ -29,8 +29,7 @@ public class LoadingActivity extends AppCompatActivity {
             }
 
             if (networkerService.authenticated) {
-                // TODO This is a debug message
-                networkerService.notificationChannel.showNotification("MessageCat", "Auth success");
+                startActivity(new Intent(LoadingActivity.this, MainActivity.class));
             }
             else {
                 startActivity(new Intent(LoadingActivity.this, NewUserActivity.class));

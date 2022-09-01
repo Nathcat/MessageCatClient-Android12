@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mobile_navigation"
+    app:startDestination="@id/chatsFragment">
+    <fragment
+        android:id="@+id/chatsFragment"
+        android:name="com.nathcat.messagecat_client.ChatsFragment"
+        android:label="fragment_chats"
+        tools:layout="@layout/fragment_chats" />
+    <fragment
+        android:id="@+id/findPeopleFragment"
+        android:name="com.nathcat.messagecat_client.FindPeopleFragment"
+        android:label="fragment_find_people"
+        tools:layout="@layout/fragment_find_people" />
+</navigation>

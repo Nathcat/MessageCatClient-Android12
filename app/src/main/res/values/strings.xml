@@ -22,4 +22,9 @@
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="noChatsMessage">You are not a member of any chats... yet!</string>
     <string name="title_activity_app_bar">AppBarActivity</string>
+    <string name="title_activity_main">MainActivity</string>
+    <string name="search_button">Search for a user</string>
+    <string name="add_friend_button">Add friend</string>
+    <string name="no_search_results_message">No results!</string>
+    <string name="no_search_performed_message">Search for a name!</string>
 </resources>
