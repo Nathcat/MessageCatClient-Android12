@@ -187,7 +187,7 @@ public class InviteToChatActivity extends AppCompatActivity {
         JSONObject request = new JSONObject();
         request.put("type", RequestType.AddChat);
         request.put("data", new ObjectContainer(new Chat(-1, chatName, chatDesc, -1)));
-        request.put("keyPair", new KeyPair(chatKeyPair.pub, null));
+        request.put("keyPair", new ObjectContainer(new KeyPair(chatKeyPair.pub, null)));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
