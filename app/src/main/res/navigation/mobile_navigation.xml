@@ -14,4 +14,14 @@
         android:name="com.nathcat.messagecat_client.FindPeopleFragment"
         android:label="fragment_find_people"
         tools:layout="@layout/fragment_find_people" />
+    <fragment
+        android:id="@+id/friendsFragment"
+        android:name="com.nathcat.messagecat_client.FriendsFragment"
+        android:label="fragment_friends"
+        tools:layout="@layout/fragment_friends" />
+    <fragment
+        android:id="@+id/invitationsFragment"
+        android:name="com.nathcat.messagecat_client.InvitationsFragment"
+        android:label="fragment_invitations"
+        tools:layout="@layout/fragment_invitations" />
 </navigation>

@@ -5,7 +5,9 @@
     android:layout_width="match_parent"
     android:layout_height="70dp"
     android:background="@drawable/chat_fragment_border"
-    tools:context=".ChatFragment">
+    tools:context=".ChatFragment"
+    android:onClick="onChatClicked"
+    android:theme="@style/Theme.MessageCat">
 
     <TextView
         android:id="@+id/chatName"
@@ -18,7 +20,8 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.02"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        android:theme="@style/Theme.MessageCat"/>
 
     <TextView
         android:id="@+id/chatDesc"
@@ -30,5 +33,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.02"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/chatName" />
+        app:layout_constraintTop_toBottomOf="@+id/chatName"
+        android:theme="@style/Theme.MessageCat"/>
 </androidx.constraintlayout.widget.ConstraintLayout>

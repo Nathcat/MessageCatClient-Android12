@@ -125,7 +125,7 @@ public class NewUserActivity extends AppCompatActivity {
         }
 
         // Return the final string
-        return sb.toString();
+        return String.valueOf(sb.toString().hashCode());
     }
 
     public void onSubmitButtonClicked(View v) {
@@ -148,6 +148,13 @@ public class NewUserActivity extends AppCompatActivity {
                     onSubmitButtonClicked(v);
                 }
 
+                // Check if the response is null
+                // If this is the case then the entry had duplicate data
+                if (response == null) {
+                    NewUserActivity.this.runOnUiThread(() -> Toast.makeText(NewUserActivity.this, "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show());
+                    return;
+                }
+
                 // Write the data to the auth file
                 try {
                     ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
@@ -155,6 +162,7 @@ public class NewUserActivity extends AppCompatActivity {
                     oos.flush();
                     oos.close();
 
+                    // TODO Remove test chats
                     oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
                     oos.writeObject(new Chat[] {new Chat(-1, "test1", "test1-desc", -1), new Chat(-1, "test2", "test2-desc", -1)});
                     oos.flush();
@@ -166,7 +174,25 @@ public class NewUserActivity extends AppCompatActivity {
                     authRequest.put("data", new ObjectContainer(response));
 
                     // Send the auth request and start the loading activity
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {}, authRequest));
+                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                        @Override
+                        public void callback(Result result, Object response) {
+                            if (result == Result.FAILED) {
+                                networkerService.authenticated = false;
+                            }
+                            else {
+                                if (response.getClass() == String.class) {
+                                    networkerService.authenticated = false;
+                                }
+                                else {
+                                    networkerService.authenticated = true;
+
+                                }
+                            }
+
+                            networkerService.waitingForResponse = false;
+                        }
+                    }, authRequest));
 
                     ((Activity) NewUserActivity.this).runOnUiThread(new Runnable() {
                         @Override
@@ -180,6 +206,8 @@ public class NewUserActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
+                networkerService.waitingForResponse = false;
             }
         }, request));
     }

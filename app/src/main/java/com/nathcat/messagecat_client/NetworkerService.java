@@ -242,6 +242,14 @@ public class NetworkerService extends Service implements Serializable {
                                 @Override
                                 public void callback(Result result, Object response) {
                                     waitingForResponse = false;
+                                    if (result == Result.FAILED) {
+                                        System.exit(1);
+                                    }
+
+                                    if (response == null) {
+                                        return;
+                                    }
+
                                     // Get the messages in the message queue as a JSON string
                                     String[] messageStrings = ((MessageQueue) response).GetJSONString();
                                     for (String messageString : messageStrings) {
@@ -352,6 +360,7 @@ public class NetworkerService extends Service implements Serializable {
         Message msg = connectionHandler.obtainMessage();
         msg.obj = request;
         msg.what = 1;
+
         // Send the request to the connection handler to be sent off to the server
         connectionHandler.sendMessage(msg);
     }

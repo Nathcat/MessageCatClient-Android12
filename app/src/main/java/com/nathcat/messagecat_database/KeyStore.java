@@ -12,11 +12,14 @@ import java.util.HashMap;
  */
 public class KeyStore {
     private HashMap<Integer, KeyPair> data;
+    private final File file;
 
     /**
      * Default constructor
      */
-    public KeyStore() throws IOException {
+    public KeyStore(File file) throws IOException {
+        this.file = file;
+
         try {
             // Try to read the data file
             data = this.ReadFromFile();
@@ -40,7 +43,7 @@ public class KeyStore {
      * @throws ClassNotFoundException Thrown if the Serialized class cannot be found
      */
     public HashMap<Integer, KeyPair> ReadFromFile() throws IOException, ClassNotFoundException {
-        ObjectInputStream ois = new ObjectInputStream(new FileInputStream("Assets/Data/KeyStore.bin"));
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file));
         return (HashMap<Integer, KeyPair>) ois.readObject();
     }
 
@@ -49,7 +52,7 @@ public class KeyStore {
      * @throws IOException Can be thrown by I/O operations
      */
     public void WriteToFile() throws IOException {
-        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("Assets/Data/KeyStore.bin"));
+        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(file));
         oos.writeObject(data);
     }
 
@@ -73,6 +76,30 @@ public class KeyStore {
 
         // Make the changes to the hash map
         this.data.put(pair.hashCode(), pair);
+
+        // Try to write the changes to the data file, or revert to the original state
+        try {
+            this.WriteToFile();
+            return Result.SUCCESS;
+
+        } catch (IOException e) {
+            this.data = (HashMap<Integer, KeyPair>) oldData;
+            return Result.FAILED;
+        }
+    }
+
+    /**
+     * Add a new key pair, using a specified id
+     * @param pair The KeyPair to add
+     * @param id The ID to use when adding the key pair
+     * @return The result code
+     */
+    public Result AddKeyPair(int id, KeyPair pair) {
+        // Create a copy of the original data
+        Object oldData = this.data.clone();
+
+        // Make the changes to the hash map
+        this.data.put(id, pair);
 
         // Try to write the changes to the data file, or revert to the original state
         try {

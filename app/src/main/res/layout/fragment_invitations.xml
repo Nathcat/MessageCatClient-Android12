@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".InvitationsFragment"
+    android:orientation="vertical"
+    android:id="@+id/InvitationsContainer"
+    android:theme="@style/Theme.MessageCat">
+
+
+    <TextView
+        android:id="@+id/noInvitesMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/no_invitations_message"
+        android:textAlignment="center"
+        android:textSize="20sp" />
+</LinearLayout>

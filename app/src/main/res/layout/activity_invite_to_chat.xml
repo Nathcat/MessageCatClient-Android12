@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".InviteToChatActivity"
+    android:theme="@style/Theme.MessageCat">
+
+    <TextView
+        android:id="@+id/textView2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/select_a_chat_to_invite_to"
+        android:textAlignment="center"
+        android:textAllCaps="false"
+        android:textSize="20sp"
+        android:theme="@style/Theme.MessageCat"/>
+
+    <LinearLayout
+        android:id="@+id/InviteToChatChatsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        tools:context=".InviteToChatActivity"
+        android:theme="@style/Theme.MessageCat">
+
+        <ImageButton
+            android:id="@+id/imageButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="Create new chat"
+            android:onClick="onAddChatButtonClicked"
+            app:srcCompat="@android:drawable/ic_input_add"
+            android:theme="@style/Theme.MessageCat"/>
+
+    </LinearLayout>
+
+</LinearLayout>

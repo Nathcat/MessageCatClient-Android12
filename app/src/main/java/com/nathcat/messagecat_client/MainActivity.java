@@ -25,9 +25,13 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.nathcat.RSA.KeyPair;
 import com.nathcat.RSA.ObjectContainer;
 import com.nathcat.messagecat_client.databinding.ActivityMainBinding;
+import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.Result;
+import com.nathcat.messagecat_database_entities.Chat;
+import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.Friendship;
 import com.nathcat.messagecat_database_entities.User;
@@ -35,6 +39,13 @@ import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Random;
@@ -66,6 +77,13 @@ public class MainActivity extends AppCompatActivity {
     // Used on the "find people page"
     private User[] searchResults;
 
+    // Used on the "friends" page
+    public User[] friends;
+
+    // Used on the invites page
+    public InvitationsFragment invitationsFragment;
+    public ArrayList<InvitationFragment> invitationFragments = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -95,21 +113,27 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
 
-        ((NavigationView) findViewById(R.id.nav_view)).setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                NavController navController = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment_content_main);
-                switch (item.getItemId()) {
-                    case R.id.nav_chats:
-                        navController.navigate(R.id.chatsFragment);
-                        break;
+        // Set a click listener so that the navigation drawer menu correctly navigates the available pages
+        ((NavigationView) findViewById(R.id.nav_view)).setNavigationItemSelectedListener(item -> {
+            NavController navController1 = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment_content_main);
+            switch (item.getItemId()) {
+                case R.id.nav_chats:
+                    navController1.navigate(R.id.chatsFragment);
+                    break;
 
-                    case R.id.nav_find_people:
-                        navController.navigate(R.id.findPeopleFragment);
-                        break;
-                }
-                return false;
+                case R.id.nav_find_people:
+                    navController1.navigate(R.id.findPeopleFragment);
+                    break;
+
+                case R.id.nav_friends:
+                    navController1.navigate(R.id.friendsFragment);
+                    break;
+
+                case R.id.nav_invitations:
+                    navController1.navigate(R.id.invitationsFragment);
+                    break;
             }
+            return false;
         });
 
         // Set the text in the nav header to show the app is waiting for the networker service
@@ -133,6 +157,10 @@ public class MainActivity extends AppCompatActivity {
                 || super.onSupportNavigateUp();
     }
 
+    /**
+     * Called when the search button is clicked on the search for people page
+     * @param v The view that called this method
+     */
     public void onSearchButtonClicked(View v) {
         View fragmentView = (View) v.getParent().getParent();
 
@@ -228,6 +256,10 @@ public class MainActivity extends AppCompatActivity {
                 request));
     }
 
+    /**
+     * Called when the button to add a friend is clicked on the search people page
+     * @param v The view that called the method
+     */
     public void onAddFriendButtonClicked(View v) {
         FragmentContainerView fragmentContainerView = (FragmentContainerView) v.getParent().getParent();
         LinearLayout ll = (LinearLayout) fragmentContainerView.getParent();
@@ -261,5 +293,213 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }, request
         ));
+    }
+
+    /**
+     * Called when a chat invite button is clicked on the friends page
+     * @param v The view that called this method
+     */
+    public void onInviteToChatClicked(View v) {
+        // Get the friend that was clicked
+        LinearLayout ll = (LinearLayout) v.getParent().getParent();
+        User friend = null;
+        for (int i = 0; i < ll.getChildCount(); i++) {
+            if (ll.getChildAt(i).equals(v.getParent())) {
+                friend = friends[i];
+                break;
+            }
+        }
+
+        assert friend != null;
+
+        Intent intent = new Intent(this, InviteToChatActivity.class);
+        Bundle bundle = new Bundle();
+        bundle.putSerializable("userToInvite", friend);
+        intent.putExtras(bundle);
+
+        startActivity(intent);
+    }
+
+    /**
+     * Called when a chat box is clicked
+     * @param v The view that called this method
+     *          TODO This method needs implementing
+     */
+    public void onChatClicked(View v) {
+        System.out.println("Not implemented!");
+    }
+
+    /**
+     * Called when an invite is accepted
+     * @param v The view that called this method
+     */
+    public void onAcceptInviteClicked(View v) {
+        // Get the invite from the view that was clicked
+        Object invite = null;
+
+        // Iterate over the invitation fragments
+        for (int i = 0; i < invitationFragments.size(); i++) {
+            // Check if the views are the same
+            if (invitationFragments.get(i).requireView().equals(v.getParent())) {
+                // Get the invite object and exit the loop
+                invite = invitationFragments.get(i).invite;
+                break;
+            }
+        }
+
+        // Ensure that the invite is found
+        assert invite != null;
+
+        // Determine if the invite is a friend request or chat invite
+        RequestType type = (invite.getClass() == FriendRequest.class) ? RequestType.AcceptFriendRequest : RequestType.AcceptChatInvite;
+
+        // Check if the user is already a member of this chat
+        if (type == RequestType.AcceptChatInvite) {
+            try {
+                ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+                Chat[] chats = (Chat[]) ois.readObject();
+                for (Chat chat : chats) {
+                    if (chat.ChatID == ((ChatInvite) invite).ChatID) {
+                        Toast.makeText(this, "You are already a member of this chat!", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+                System.exit(1);
+            }
+        }
+
+        // Create a request to accept the invite
+        JSONObject request = new JSONObject();
+        request.put("type", type);
+        request.put("data", new ObjectContainer(invite));
+
+        Object finalInvite = invite;
+        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                if (result == Result.FAILED) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                    System.exit(1);
+                }
+
+                // Check if the response is a string
+                if (response.getClass() == String.class) {
+                    // Output an appropriate message based on the response
+                    if (response.equals("failed")) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to accept invite :(", Toast.LENGTH_SHORT).show());
+                        MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
+                    }
+                    else {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
+                        MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
+                    }
+                }
+                else {  // In this case the response will be a key pair, and the invite must have been a chat invite
+                    assert finalInvite instanceof ChatInvite;
+                    KeyPair privateKey = (KeyPair) response;
+
+                    // Request the chat as we need it's public key id to store it in the internal key store
+                    JSONObject chatRequest = new JSONObject();
+                    chatRequest.put("type", RequestType.GetChat);
+                    chatRequest.put("data", new ObjectContainer(new Chat(((ChatInvite) finalInvite).ChatID, "", "", -1)));
+
+                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                        @Override
+                        public void callback(Result result, Object response) {
+                            if (result == Result.FAILED) {
+                                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                                System.exit(1);
+                            }
+
+                            Chat chat = (Chat) response;
+
+                            // Add the private key to the key store and the chat to the chats file
+                            try {
+                                KeyStore keyStore = new KeyStore(new File(getFilesDir(), "KeyStore.bin"));
+                                keyStore.AddKeyPair(chat.PublicKeyID, privateKey);
+
+                                ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+                                Chat[] chats = (Chat[]) ois.readObject();
+                                Chat[] newChats = new Chat[chats.length + 1];
+                                System.arraycopy(chats, 0, newChats, 0, chats.length);
+                                newChats[chats.length] = chat;
+                                ois.close();
+                                ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
+                                oos.writeObject(newChats);
+                                oos.flush();
+                                oos.close();
+
+
+                            } catch (IOException | ClassNotFoundException e) {
+                                e.printStackTrace();
+                                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                                System.exit(1);
+                            }
+
+                            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
+                            MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
+
+                            networkerService.waitingForResponse = false;
+                        }
+                    }, chatRequest));
+
+                }
+
+                networkerService.waitingForResponse = false;
+            }
+        }, request));
+    }
+
+    /**
+     * Called when an invite is declined
+     * @param v The view that called this method
+     */
+    public void onDeclineInviteClicked(View v) {
+        // Get the invite from the view that was clicked
+        Object invite = null;
+
+        // Iterate over the invitation fragments
+        for (int i = 0; i < invitationFragments.size(); i++) {
+            // Check if the views are the same
+            if (invitationFragments.get(i).requireView().equals(v.getParent())) {
+                // Get the invite object and exit the loop
+                invite = invitationFragments.get(i).invite;
+                break;
+            }
+        }
+
+        // Ensure that the invite is found
+        assert invite != null;
+
+        // Determine if the invite is a friend request or chat invite
+        RequestType type = (invite.getClass() == FriendRequest.class) ? RequestType.DeclineFriendRequest : RequestType.DeclineChatInvite;
+
+        // Create a request to decline the invite
+        JSONObject request = new JSONObject();
+        request.put("type", type);
+        request.put("data", new ObjectContainer(invite));
+
+        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                if (result == Result.FAILED) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                    System.exit(1);
+                }
+
+                // Output an appropriate message based on the response
+                if (response.equals("failed")) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to decline invite :(", Toast.LENGTH_SHORT).show());
+                }
+                else {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite declined!", Toast.LENGTH_SHORT).show());
+                }
+
+                MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
+
+                networkerService.waitingForResponse = false;
+            }
+        }, request));
     }
 }

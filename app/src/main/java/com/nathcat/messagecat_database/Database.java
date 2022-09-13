@@ -25,7 +25,7 @@ public class Database {
         // Try to create instances of the three database systems
         try {
             this.mySQLHandler = new MySQLHandler();
-            this.keyStore = new KeyStore();
+            this.keyStore = new KeyStore(null);
             this.messageStore = new MessageStore();
 
         } catch (ParseException | SQLException | IOException e) {
