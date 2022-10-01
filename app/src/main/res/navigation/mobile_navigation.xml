@@ -24,4 +24,9 @@
         android:name="com.nathcat.messagecat_client.InvitationsFragment"
         android:label="fragment_invitations"
         tools:layout="@layout/fragment_invitations" />
+    <fragment
+        android:id="@+id/messagingFragment"
+        android:name="com.nathcat.messagecat_client.MessagingFragment"
+        android:label="fragment_messaging"
+        tools:layout="@layout/fragment_messaging" />
 </navigation>

@@ -25,8 +25,10 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
 import com.nathcat.RSA.ObjectContainer;
+import com.nathcat.RSA.PublicKeyException;
 import com.nathcat.messagecat_client.databinding.ActivityMainBinding;
 import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.Result;
@@ -34,6 +36,7 @@ import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.Friendship;
+import com.nathcat.messagecat_database_entities.Message;
 import com.nathcat.messagecat_database_entities.User;
 import com.nathcat.messagecat_server.RequestType;
 
@@ -48,6 +51,7 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
@@ -83,6 +87,13 @@ public class MainActivity extends AppCompatActivity {
     // Used on the invites page
     public InvitationsFragment invitationsFragment;
     public ArrayList<InvitationFragment> invitationFragments = new ArrayList<>();
+
+    // Used on the messaging page
+    public HashMap<Integer, User> users;
+    public MessagingFragment messagingFragment;
+
+    // Used on the chats page
+    public ArrayList<ChatFragment> chatFragments = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -323,10 +334,27 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Called when a chat box is clicked
      * @param v The view that called this method
-     *          TODO This method needs implementing
      */
     public void onChatClicked(View v) {
-        System.out.println("Not implemented!");
+        // Get the navigation controller for this activity
+        NavController navController1 = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment_content_main);
+        // Create the bundle which we will pass to the messaging fragment
+        Bundle bundle = new Bundle();
+
+        // We now need to determine which chat was clicked
+        boolean found = false;
+        for (int i = 0; i < chatFragments.size(); i++) {
+            if (chatFragments.get(i).requireView().equals(v)) {
+                bundle.putSerializable("chat", chatFragments.get(i).chat);
+                found = true;
+                break;
+            }
+        }
+
+        assert found;  // Ensure that the chat was found
+
+        // Navigate to the messaging fragment, passing the argument bundle
+        navController1.navigate(R.id.messagingFragment, bundle);
     }
 
     /**
@@ -501,5 +529,66 @@ public class MainActivity extends AppCompatActivity {
                 networkerService.waitingForResponse = false;
             }
         }, request));
+    }
+
+    /**
+     * Sends a message to the currently active chat
+     * @param v The view that called this method
+     *          TODO This is untested
+     */
+    public void SendMessage(View v) throws IOException {
+        // Get the active chat from the messaging fragment
+        Chat chat = messagingFragment.chat;
+
+        // Get the message from the text box
+        String messageContent = ((EditText) ((View) v.getParent()).findViewById(R.id.MessageEntry)).getText().toString();
+        // Get the chat's public key from the server
+        JSONObject keyRequest = new JSONObject();
+        keyRequest.put("type", RequestType.GetPublicKey);
+        keyRequest.put("data", new ObjectContainer(chat.PublicKeyID));
+
+        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                if (result == Result.FAILED || response == null) {
+                    MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
+                    System.exit(1);
+                }
+
+                // Encrypt the message contents using the public key
+                assert response != null;
+                KeyPair publicKey = (KeyPair) ((ObjectContainer) response).obj;
+                EncryptedObject[] eContent = null;
+                try {
+                    eContent = publicKey.encryptBigObject(messageContent);
+
+                } catch (PublicKeyException e) {
+                    MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
+                    System.exit(1);
+                }
+
+                assert eContent != null;
+
+                // Create the message object to send to the server
+                Message message = new Message(networkerService.user.UserID, chat.ChatID, new Date().getTime(), eContent);
+
+                JSONObject sendRequest = new JSONObject();
+                sendRequest.put("type", new ObjectContainer(RequestType.SendMessage));
+                sendRequest.put("data", new ObjectContainer(message));
+
+                networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                    @Override
+                    public void callback(Result result, Object response) {
+                        if (result == Result.FAILED || response == null) {
+                            MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
+                            System.exit(1);
+                        }
+                    }
+                }, sendRequest));
+            }
+        }, keyRequest));
+
+        // Clear the text box
+        ((EditText) ((View) v.getParent()).findViewById(R.id.MessageEntry)).setText("");
     }
 }

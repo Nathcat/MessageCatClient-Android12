@@ -18,15 +18,20 @@
         android:theme="@style/Theme.MessageCat">
         <activity
             android:name=".InviteToChatActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            />
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:label="@string/title_activity_main"
-            android:theme="@style/Theme.MessageCat.NoActionBar" />
+            android:theme="@style/Theme.MessageCat.NoActionBar"
+            android:windowSoftInputMode="adjustResize"/>
         <activity
             android:name=".NewUserActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            />
 
         <service android:name=".NetworkerService" />
 

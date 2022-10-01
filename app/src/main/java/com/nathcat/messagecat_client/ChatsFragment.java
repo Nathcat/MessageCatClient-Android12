@@ -43,6 +43,11 @@ public class ChatsFragment extends Fragment {
 
         Chat[] chats;
 
+        try {
+            ((MainActivity) requireActivity()).chatFragments.clear();
+
+        } catch (ClassCastException ignored) {}
+
         // Get the array of chats from local storage
         try {
             ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(requireActivity().getFilesDir(), "Chats.bin")));
@@ -74,6 +79,7 @@ public class ChatsFragment extends Fragment {
             Bundle bundle = new Bundle();
             bundle.putString("chatName", chat.Name);
             bundle.putString("chatDesc", chat.Description);
+            bundle.putSerializable("chat", chat);
 
             requireActivity().getSupportFragmentManager().beginTransaction()
                     .setReorderingAllowed(true)
