@@ -1,6 +1,7 @@
 package com.nathcat.messagecat_server;
 
 import com.nathcat.RSA.*;
+import com.nathcat.messagecat_database.MessageQueue;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.*;
 import org.json.simple.JSONObject;
@@ -113,17 +114,7 @@ public class ConnectionHandler extends Handler {
             try {
                 JSONObject request = (JSONObject) this.keyPair.decryptBigObject((EncryptedObject[]) this.Receive());
                 Object response = this.HandleRequest(request);
-                this.Send(this.clientKeyPair.encryptBigObject(response));
-                /*
-                if (response == null) {
-                    this.Send(this.clientKeyPair.encrypt(response));
-                }
-                else if (response.getClass() == KeyPair.class) {
-                    this.Send(this.clientKeyPair.encryptBigObject(response));
-                }
-                else {
-                    this.Send(this.clientKeyPair.encrypt(response));
-                }*/
+                this.Send(this.clientKeyPair.encryptBigObject(new ObjectContainer(response)));
 
             } catch (PrivateKeyException | PublicKeyException | IOException | ClassNotFoundException e) {
                 this.DebugLog("Exception in main protocol: " + e.getMessage());
@@ -141,32 +132,106 @@ public class ConnectionHandler extends Handler {
     private Object HandleRequest(JSONObject request) {
         this.request = request;
 
-        switch ((RequestType) request.get("type")) {
-            case Authenticate:         return this.Authenticate();
-            case GetUser:              return this.GetUser();
-            case GetFriendship:        return this.GetFriendship();
-            case GetFriendRequests:    return this.GetFriendRequests();
-            case GetChat:              return this.GetChat();
-            case GetChatInvite:        return this.GetChatInvite();
-            case GetPublicKey:         return this.GetPublicKey();
-            case GetMessageQueue:      return this.GetMessageQueue();
-            case AddUser:              return this.AddUser();
-            case AddChat:              return this.AddChat();
-            case AcceptFriendRequest:  return this.AcceptFriendRequest();
-            case DeclineFriendRequest: return this.DeclineFriendRequest();
-            case AcceptChatInvite:     return this.AcceptChatInvite();
-            case DeclineChatInvite:    return this.DeclineChatInvite();
-            case SendMessage:          return this.SendMessage();
-            case SendFriendRequest:    return this.SendFriendRequest();
-            case SendChatInvite:       return this.SendChatInvite();
-
-            default: return null;
+        if (request == null) {
+            this.Close();
+            return null;
         }
+
+        RequestType type;
+
+        if (request.get("type").getClass() == ObjectContainer.class) {
+            type = (RequestType) ((ObjectContainer) request.get("type")).obj;
+        }
+        else {
+            type = (RequestType) request.get("type");
+        }
+
+        this.DebugLog(type.toString());
+/*
+        switch (type) {
+            case Authenticate -> {
+                return this.Authenticate();
+            }
+
+            case GetUser -> {
+                return this.GetUser();
+            }
+
+            case GetFriendship -> {
+                return this.GetFriendship();
+            }
+
+            case GetFriendRequests -> {
+                return this.GetFriendRequests();
+            }
+
+            case GetChat -> {
+                return this.GetChat();
+            }
+
+            case GetChatInvite -> {
+                return this.GetChatInvite();
+            }
+
+            case GetPublicKey -> {
+                return this.GetPublicKey();
+            }
+
+            case GetMessageQueue -> {
+                return this.GetMessageQueue();
+            }
+
+            case AddUser -> {
+                return this.AddUser();
+            }
+
+            case AddChat -> {
+                return this.AddChat();
+            }
+
+            case AddListenRule -> {
+                return this.AddListenRule();
+            }
+
+            case RemoveListenRule -> {
+                return this.RemoveListenRule();
+            }
+
+            case AcceptFriendRequest -> {
+                return this.AcceptFriendRequest();
+            }
+
+            case DeclineFriendRequest -> {
+                return this.DeclineFriendRequest();
+            }
+
+            case AcceptChatInvite -> {
+                return this.AcceptChatInvite();
+            }
+
+            case DeclineChatInvite -> {
+                return this.DeclineChatInvite();
+            }
+
+            case SendMessage -> {
+                return this.SendMessage();
+            }
+
+            case SendFriendRequest -> {
+                return this.SendFriendRequest();
+            }
+
+            case SendChatInvite -> {
+                return this.SendChatInvite();
+            }
+        }*/
+
+        return null;
     }
 
     private Object Authenticate() {
         // Get the authentication data from the request
-        User authData = (User) this.request.get("data");
+        User authData = (User) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the corresponding user from the database (by username)
         User user = this.server.db.GetUserByUsername(authData.Username);
@@ -194,7 +259,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the user from the request and decrypt
-        User requestedUser = (User) this.request.get("data");
+        User requestedUser = (User) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the selector
         String selector = (String) this.request.get("selector");
@@ -239,7 +304,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the friendship from the request and decrypt
-        Friendship requestedFriendship = (Friendship) this.request.get("data");
+        Friendship requestedFriendship = (Friendship) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the selector
         String selector = (String) this.request.get("selector");
@@ -270,7 +335,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the friend request from the request and decrypt it
-        FriendRequest requestedFriendRequest = (FriendRequest) this.request.get("data");
+        FriendRequest requestedFriendRequest = (FriendRequest) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the selector
         String selector = (String) this.request.get("selector");
@@ -299,7 +364,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat from the request and decrypt
-        Chat requestedChat = (Chat) this.request.get("data");
+        Chat requestedChat = (Chat) ((ObjectContainer) this.request.get("data")).obj;
 
         // Search the database and return the result
         return this.server.db.GetChatByID(requestedChat.ChatID);
@@ -311,7 +376,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat invite from the request and decrypt it
-        ChatInvite requestedChatInvite = (ChatInvite) this.request.get("data");
+        ChatInvite requestedChatInvite = (ChatInvite) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the selector
         String selector = (String) this.request.get("selector");
@@ -343,10 +408,10 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the public key id from the request
-        int keyID = (int) this.request.get("data");
+        int keyID = (int) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the key pair from the database
-        return this.server.db.GetKeyPair(keyID);
+        return new ObjectContainer(this.server.db.GetKeyPair(keyID));
     }
 
     private Object GetMessageQueue() {
@@ -355,15 +420,19 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat id from the request
-        int chatID = (int) this.request.get("data");
+        int chatID = (int) ((ObjectContainer) this.request.get("data")).obj;
 
         // Get the message queue
-        return this.server.db.GetMessageQueue(chatID);
+        return new ObjectContainer(new ObjectContainer(this.server.db.GetMessageQueue(chatID)));
     }
 
     private Object AddUser() {
         // Get the user from the request and decrypt
-        User newUser = (User) this.request.get("data");
+        User newUser = (User) ((ObjectContainer) this.request.get("data")).obj;
+
+        if (this.server.db.GetUserByDisplayName(newUser.DisplayName) != null || this.server.db.GetUserByUsername(newUser.Username) != null) {
+            return null;
+        }
 
         // Add the new user through the database
         this.server.db.AddUser(newUser);
@@ -378,20 +447,62 @@ public class ConnectionHandler extends Handler {
         }
 
         // Create a new public key
-        KeyPair chatKeyPair = (KeyPair) this.request.get("keyPair");
-        this.DebugLog(chatKeyPair.toString());
-        this.DebugLog(String.valueOf(chatKeyPair.hashCode()));
+        KeyPair chatKeyPair = (KeyPair) ((ObjectContainer) this.request.get("keyPair")).obj;
 
         // Get the chat from the request and decrypt
-        Chat newChat = (Chat) this.request.get("data");
+        Chat newChat = (Chat) ((ObjectContainer) this.request.get("data")).obj;
         newChat = new Chat(newChat.ChatID, newChat.Name, newChat.Description, chatKeyPair.hashCode());
 
-        // Add the chat and public key to the database
+        // Add the chat, public key, and message queue to the database
         this.server.db.AddChat(newChat);
         this.server.db.AddKeyPair(chatKeyPair);
+        // Get the chat from the database, so we know it's ID
+        newChat = this.server.db.GetChatByPublicKeyID(newChat.PublicKeyID);
+        // Create a new message queue
+        MessageQueue messageQueue = new MessageQueue(newChat.ChatID);
+        this.server.db.AddMessageQueue(messageQueue);
 
         // Send the new chat back to the client
         return this.server.db.GetChatByPublicKeyID(chatKeyPair.hashCode());
+    }
+
+    private Object AddListenRule() {
+        if (!this.authenticated) {
+            return null;
+        }
+
+        // Get the listen rule object from the request
+        ListenRule listenRule = (ListenRule) ((ObjectContainer) this.request.get("data")).obj;
+        listenRule.handler =  this;
+        try {
+            // Assign an id to the listen rule and add the rule to the list
+            listenRule.setId(this.server.listenRules.size());
+            this.server.listenRules.add(listenRule);
+            // Return the id of the listen rule
+            return listenRule.getId();
+
+        } catch (ListenRule.IDAlreadySetException e) {
+            e.printStackTrace();
+            return "failed";
+        }
+    }
+
+    private Object RemoveListenRule() {
+        if (!this.authenticated) {
+            return null;
+        }
+
+        int id = (int) ((ObjectContainer) this.request.get("data")).obj;
+        boolean found = false;
+        for (int i = 0; i < this.server.listenRules.size(); i++) {
+            if (this.server.listenRules.get(i).getId() == id) {
+                this.server.listenRules.remove(i);
+                found = true;
+                break;
+            }
+        }
+
+        return found ? "done" : "failed";
     }
 
     private Object AcceptFriendRequest() {
@@ -400,7 +511,21 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the friend request from the request, since the data contained are all integers we do not need to decrypt
-        FriendRequest fr = (FriendRequest) this.request.get("data");
+        FriendRequest fr = (FriendRequest) ((ObjectContainer) this.request.get("data")).obj;
+
+        // Check if this request triggers any listen rules
+        for (ListenRule rule : this.server.listenRules) {
+            try {
+                if (rule.CheckRequest(RequestType.AcceptFriendRequest, fr)) {
+                    rule.handler.Send(rule.handler.clientKeyPair.encryptBigObject(new ObjectContainer(this.request)));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException | PublicKeyException | IOException ignored) {}
+        }
+
+        // Check if the two users involved are already friends
+        if (this.server.db.GetFriendshipByUserIDAndFriendID(fr.SenderID, fr.RecipientID) != null) {
+            return "done";
+        }
 
         // Create the friend objects
         Friendship friendA = new Friendship(-1, fr.SenderID, fr.RecipientID, "");
@@ -425,7 +550,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the friend request from the request, since the data contained are all integers we do not need to decrypt
-        FriendRequest fr = (FriendRequest) this.request.get("data");
+        FriendRequest fr = (FriendRequest) ((ObjectContainer) this.request.get("data")).obj;
 
         // Delete the friend requests from the database
         if (this.server.db.DeleteFriendRequest(fr.FriendRequestID) == Result.FAILED) {
@@ -442,8 +567,17 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat invite from the request and the private key from the database
-        ChatInvite ci = (ChatInvite) this.request.get("data");
+        ChatInvite ci = (ChatInvite) ((ObjectContainer) this.request.get("data")).obj;
         KeyPair privateKey = this.server.db.GetKeyPair(ci.PrivateKeyID);
+
+        // Check if this request triggers any listen rules
+        for (ListenRule rule : this.server.listenRules) {
+            try {
+                if (rule.CheckRequest(RequestType.AcceptChatInvite, ci)) {
+                    rule.handler.Send(rule.handler.clientKeyPair.encryptBigObject(new ObjectContainer(this.request)));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException | PublicKeyException | IOException ignored) {}
+        }
 
         // Delete the chat invite from the database
         if (this.server.db.DeleteChatInvite(ci.ChatInviteID) == Result.FAILED || this.server.db.RemoveKeyPair(ci.PrivateKeyID) == Result.FAILED) {
@@ -459,7 +593,7 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat invite from the request and the private key from the database
-        ChatInvite ci = (ChatInvite) this.request.get("data");
+        ChatInvite ci = (ChatInvite) ((ObjectContainer) this.request.get("data")).obj;
 
         // Delete the chat invite from the database
         if (this.server.db.DeleteChatInvite(ci.ChatInviteID) == Result.FAILED || this.server.db.RemoveKeyPair(ci.PrivateKeyID) == Result.FAILED) {
@@ -475,10 +609,20 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the message from the database
-        Message message = (Message) this.request.get("data");
+        Message message = (Message) ((ObjectContainer) this.request.get("data")).obj;
+
+        // Check if this request triggers any listen rules
+        for (ListenRule rule : this.server.listenRules) {
+            try {
+                if (rule.CheckRequest(RequestType.SendMessage, message)) {
+                    rule.handler.Send(rule.handler.clientKeyPair.encryptBigObject(new ObjectContainer(this.request)));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException | PublicKeyException | IOException ignored) {}
+        }
 
         // Add the message to the database
         this.server.db.GetMessageQueue(message.ChatID).Push(message);
+        this.server.db.SaveKeyAndMessageStore();
 
         // Reply to the client
         return "done";
@@ -490,7 +634,16 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the friend request from the request
-        FriendRequest fr = (FriendRequest) this.request.get("data");
+        FriendRequest fr = (FriendRequest) ((ObjectContainer) this.request.get("data")).obj;
+
+        // Check if this request triggers any listen rules
+        for (ListenRule rule : this.server.listenRules) {
+            try {
+                if (rule.CheckRequest(RequestType.SendFriendRequest, fr)) {
+                    rule.handler.Send(rule.handler.clientKeyPair.encryptBigObject(new ObjectContainer(this.request)));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException | PublicKeyException | IOException ignored) {}
+        }
 
         // Add the request to the database
         if (this.server.db.AddFriendRequest(fr) == Result.FAILED) {
@@ -506,8 +659,18 @@ public class ConnectionHandler extends Handler {
         }
 
         // Get the chat invite and public key from the request
-        ChatInvite chatInvite = (ChatInvite) this.request.get("data");
+        ChatInvite chatInvite = (ChatInvite) ((ObjectContainer) this.request.get("data")).obj;
         KeyPair privateKey = (KeyPair) this.request.get("keyPair");
+        chatInvite = new ChatInvite(chatInvite.ChatInviteID, chatInvite.ChatID, chatInvite.SenderID, chatInvite.RecipientID, chatInvite.TimeSent, privateKey.hashCode());
+
+        // Check if this request triggers any listen rules
+        for (ListenRule rule : this.server.listenRules) {
+            try {
+                if (rule.CheckRequest(RequestType.SendChatInvite, chatInvite)) {
+                    rule.handler.Send(rule.handler.clientKeyPair.encryptBigObject(new ObjectContainer(this.request)));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException | PublicKeyException | IOException ignored) {}
+        }
 
         // Add the chat invite and private key to the database
         if (this.server.db.AddKeyPair(privateKey) == Result.FAILED || this.server.db.AddChatInvite(chatInvite) == Result.FAILED) {

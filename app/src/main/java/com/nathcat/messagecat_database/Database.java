@@ -25,7 +25,7 @@ public class Database {
         // Try to create instances of the three database systems
         try {
             this.mySQLHandler = new MySQLHandler();
-            this.keyStore = new KeyStore(null);
+            this.keyStore = new KeyStore();
             this.messageStore = new MessageStore();
 
         } catch (ParseException | SQLException | IOException e) {
@@ -39,6 +39,20 @@ public class Database {
         expirationManager = new ExpirationManager(this);
         expirationManager.setDaemon(true);
         expirationManager.start();
+    }
+
+    /**
+     * @see MessageStore#WriteToFile()
+     * @see KeyStore#WriteToFile()
+     */
+    public void SaveKeyAndMessageStore() {
+        try {
+            this.messageStore.WriteToFile();
+            this.keyStore.WriteToFile();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**

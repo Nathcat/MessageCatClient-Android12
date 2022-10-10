@@ -416,12 +416,11 @@ public class MainActivity extends AppCompatActivity {
                     // Output an appropriate message based on the response
                     if (response.equals("failed")) {
                         runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to accept invite :(", Toast.LENGTH_SHORT).show());
-                        MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
                     }
                     else {
                         runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
-                        MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
                     }
+                    MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
                 }
                 else {  // In this case the response will be a key pair, and the invite must have been a chat invite
                     assert finalInvite instanceof ChatInvite;
@@ -534,7 +533,6 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Sends a message to the currently active chat
      * @param v The view that called this method
-     *          TODO This is untested
      */
     public void SendMessage(View v) throws IOException {
         // Get the active chat from the messaging fragment

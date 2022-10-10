@@ -21,6 +21,7 @@ import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.Message;
 import com.nathcat.messagecat_database_entities.User;
+import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
@@ -36,6 +37,7 @@ public class MessagingFragment extends Fragment {
 
     /**
      * Used to continuously update the message box
+     * @deprecated
      */
     private class MessageBoxUpdaterThread extends Thread {
         public boolean allowRun = true;
@@ -78,7 +80,7 @@ public class MessagingFragment extends Fragment {
 
                             // Call the update message box function on the UI thread
                             // Passing the instance of the fragment class as a parameter
-                            requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBox(MessagingFragment.this, privateKey));
+                            requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
 
                             networkerService.waitingForResponse = false;
                         }
@@ -94,10 +96,11 @@ public class MessagingFragment extends Fragment {
     }
 
     public Chat chat;
+    private KeyPair privateKey;
     private NetworkerService networkerService;
     private MessageQueue messageQueue;
-    private MessageBoxUpdaterThread updaterThread;
     private long newestMessageTimeSent = 0;
+    private int listenRuleId = -1;
 
     public MessagingFragment() {
         super(R.layout.fragment_messaging);
@@ -129,37 +132,98 @@ public class MessagingFragment extends Fragment {
 
         ((MainActivity) requireActivity()).messagingFragment = this;
 
+        try {
+            KeyStore keyStore = new KeyStore(new File(requireActivity().getFilesDir(), "KeyStore.bin"));
+            privateKey = keyStore.GetKeyPair(MessagingFragment.this.chat.PublicKeyID);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        assert privateKey != null;
+
         // Create the users hashmap and put the current user in it
         ((MainActivity) requireActivity()).users = new HashMap<>();
         ((MainActivity) requireActivity()).users.put(networkerService.user.UserID, networkerService.user);
 
         networkerService.waitingForResponse = false;
 
+        // Request the message queue from the server
+        JSONObject request = new JSONObject();
+        request.put("type", RequestType.GetMessageQueue);
+        request.put("data", new ObjectContainer(chat.ChatID));
 
-        // Create and start the message box updater thread
-        try {
-            updaterThread = new MessageBoxUpdaterThread();
-            updaterThread.start();
+        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                // Check if the request failed
+                if (result == Result.FAILED || response == null) {
+                    requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                    return;
+                }
 
-        } catch (IOException e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
+                // Assign the message queue to the field
+                messageQueue = (MessageQueue) ((ObjectContainer) ((ObjectContainer) response).obj).obj;
+
+                // Call the update message box function on the UI thread
+                // Passing the instance of the fragment class as a parameter
+                requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
+
+                networkerService.waitingForResponse = false;
+            }
+        }, request));
+
+
+        // Create the listen rule for messages in this chat
+        ListenRule listenRule = new ListenRule(RequestType.SendMessage, "ChatID", this.chat.ChatID);
+        JSONObject listenRuleRequest = new JSONObject();
+        listenRuleRequest.put("type", RequestType.AddListenRule);
+        listenRuleRequest.put("data", new ObjectContainer(listenRule));
+
+        networkerService.SendListenRuleRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+            @Override
+            public void callback(Object response) {
+                updateMessageBox((Message) ((ObjectContainer) ((JSONObject) response).get("data")).obj);
+            }
+        }, new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                if (result == Result.FAILED) {
+                    System.out.println("Failed to create listen rule");
+                    System.exit(1);
+                }
+
+                listenRuleId = (int) response;
+            }
+        }, listenRuleRequest));
     }
 
     @Override
     public void onStop() {
         super.onStop();
 
-        updaterThread.allowRun = false;
+        JSONObject request = new JSONObject();
+        request.put("type", RequestType.RemoveListenRule);
+        request.put("data", new ObjectContainer(listenRuleId));
+
+        networkerService.SendListenRuleRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+            @Override
+            public void callback(Object response) {
+                NetworkerService.IListenRuleCallback.super.callback(response);
+            }
+        }, new NetworkerService.IRequestCallback() {
+            @Override
+            public void callback(Result result, Object response) {
+                NetworkerService.IRequestCallback.super.callback(result, response);
+            }
+        }, request));
     }
 
     /**
      * Updates the messagebox with the current contents of the message queue
      * @param fragment The instance of the current fragment class, this is necessary as this method will mostly be called from a Runnable, which is a static context
-     * TODO This is untested
      */
-    public static void updateMessageBox(MessagingFragment fragment, KeyPair privateKey) {
+    public static void updateMessageBoxStart(MessagingFragment fragment, KeyPair privateKey) {
         // Remove all messages currently in the messagebox
         //((LinearLayout) fragment.requireView().findViewById(R.id.MessageBox)).removeAllViews();
 
@@ -183,7 +247,7 @@ public class MessagingFragment extends Fragment {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetUser);
                 request.put("selector", "id");
-                request.put("data", new ObjectContainer(new User((int) message.SenderID, null, null, null, null, null)));
+                request.put("data", new ObjectContainer(new User(message.SenderID, null, null, null, null, null)));
 
                 fragment.networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                     @Override
@@ -200,8 +264,10 @@ public class MessagingFragment extends Fragment {
                             System.exit(1);
                         }
 
+                        // Create a new message object with the decrypted contents
                         Message decryptedMessage = new Message(message.SenderID, message.ChatID, message.TimeSent, content);
 
+                        // Add the message to the view as a fragment
                         Bundle bundle = new Bundle();
                         bundle.putSerializable("message", decryptedMessage);
                         bundle.putBoolean("fromOtherUser", message.SenderID != fragment.networkerService.user.UserID);
@@ -214,6 +280,7 @@ public class MessagingFragment extends Fragment {
                 }, request));
             }
             else {
+                // Decrypt the message contents
                 String content = null;
                 try {
                     content = (String) privateKey.decryptBigObject((EncryptedObject[]) message.Content);
@@ -223,6 +290,7 @@ public class MessagingFragment extends Fragment {
                     System.exit(1);
                 }
 
+                // Add the message to the view as a fragment
                 Bundle bundle = new Bundle();
                 bundle.putSerializable("message", new Message(message.SenderID, message.ChatID, message.TimeSent, content));
                 bundle.putBoolean("fromOtherUser", message.SenderID != fragment.networkerService.user.UserID);
@@ -235,5 +303,70 @@ public class MessagingFragment extends Fragment {
         }
 
         fragment.networkerService.waitingForResponse = false;
+    }
+
+    /**
+     * Updates the message box with the current contents of the chat following the listen rule architecture
+     */
+    public void updateMessageBox(Message newMessage) {
+        // If the user that sent the message is not currently in the hashmap, request the user from the server and add them
+        // Then we can add the message
+        if (((MainActivity) requireActivity()).users.get(newMessage.SenderID) == null) {
+            JSONObject request = new JSONObject();
+            request.put("type", RequestType.GetUser);
+            request.put("selector", "id");
+            request.put("data", new ObjectContainer(new User((int) newMessage.SenderID, null, null, null, null, null)));
+
+            networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                @Override
+                public void callback(Result result, Object response) {
+                    ((MainActivity) requireActivity()).users.put(((User) response).UserID, (User) response);
+
+                    // Decrypt the message before passing it to the fragment
+                    String content = null;
+                    try {
+                        content = (String) privateKey.decryptBigObject((EncryptedObject[]) newMessage.Content);
+
+                    } catch (PrivateKeyException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+
+                    // Create a new message object with the decrypted contents
+                    Message decryptedMessage = new Message(newMessage.SenderID, newMessage.ChatID, newMessage.TimeSent, content);
+
+                    // Add the message to the view as a fragment
+                    Bundle bundle = new Bundle();
+                    bundle.putSerializable("message", decryptedMessage);
+                    bundle.putBoolean("fromOtherUser", newMessage.SenderID != networkerService.user.UserID);
+
+                    getChildFragmentManager().beginTransaction()
+                            .setReorderingAllowed(true)
+                            .add(R.id.MessageBox, MessageFragment.class, bundle)
+                            .commit();
+                }
+            }, request));
+        }
+        else {
+            // Decrypt the contents of the message
+            String content = null;
+            try {
+                content = (String) privateKey.decryptBigObject((EncryptedObject[]) newMessage.Content);
+
+            } catch (PrivateKeyException e) {
+                e.printStackTrace();
+                System.exit(1);
+            }
+
+            // Add the message to the view as a fragment
+            Bundle bundle = new Bundle();
+            bundle.putSerializable("message", new Message(newMessage.SenderID, newMessage.ChatID, newMessage.TimeSent, content));
+            bundle.putBoolean("fromOtherUser", newMessage.SenderID != networkerService.user.UserID);
+
+            getChildFragmentManager().beginTransaction()
+                    .setReorderingAllowed(true)
+                    .add(R.id.MessageBox, MessageFragment.class, bundle)
+                    .commit();
+        }
     }
 }

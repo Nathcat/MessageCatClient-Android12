@@ -103,6 +103,28 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     /**
+     * Passed to the active ListenRuleHandler to create a new listen rule on the server
+     */
+    public static class ListenRuleRequest {
+        public final IListenRuleCallback callback;      // Called when the listen rule is triggered
+        public final IRequestCallback requestCallback;  // Called when the request is completed
+        public final Object request;                    // The request object to send to the server
+
+        public ListenRuleRequest(IListenRuleCallback callback, IRequestCallback requestCallback, Object request) {
+            this.callback = callback;
+            this.requestCallback = requestCallback;
+            this.request = request;
+        }
+    }
+
+    /**
+     * Listen rule callback interface, called when a listen rule is triggered
+     */
+    public interface IListenRuleCallback {
+        default void callback(Object response) {}
+    }
+
+    /**
      * Used by the main application activity (UI thread) to get the active instance of this service
      */
     public class NetworkerServiceBinder extends Binder {
@@ -117,6 +139,7 @@ public class NetworkerService extends Service implements Serializable {
 
     /**
      * Process which manages notifications while the application is not open
+     * @deprecated
      */
     private class NotifierRoutine extends Thread {
         @Override
@@ -294,7 +317,9 @@ public class NetworkerService extends Service implements Serializable {
 
     public NotificationChannel notificationChannel;  // The notification channel to be used to send notifications
     private ConnectionHandler connectionHandler;     // The active connection handler
+    private ListenRuleHandler listenRuleHandler;     // The active listen rule handler
     private Looper connectionHandlerLooper;          // The Handler looper attached to the active connection handler
+    private Looper listenRuleHandlerLooper;          // The Handler looper attached to the connection managing listening rules
     public boolean authenticated = false;            // Is the client currently authenticated
     public boolean waitingForResponse = false;       // Is the client currently waiting for a response
     private final NetworkerServiceBinder binder = new NetworkerServiceBinder();
@@ -351,7 +376,7 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     /**
-     * Send a request to the server
+     * Send a request to the server via the connection handler
      * @param request The request object
      */
     public void SendRequest(Request request) {
@@ -363,6 +388,21 @@ public class NetworkerService extends Service implements Serializable {
 
         // Send the request to the connection handler to be sent off to the server
         connectionHandler.sendMessage(msg);
+    }
+
+    /**
+     * Send a request to the server via the listen rule handler
+     * @param request The request object
+     */
+    public void SendListenRuleRequest(ListenRuleRequest request) {
+        this.waitingForResponse = true;  // Indicate that the client is waiting for a response
+        // Create the message to the connection handler
+        Message msg = listenRuleHandler.obtainMessage();
+        msg.obj = request;
+        msg.what = 1;
+
+        // Send the request to the connection handler to be sent off to the server
+        listenRuleHandler.sendMessage(msg);
     }
 
     @Override
@@ -377,15 +417,21 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     public void startConnectionHandler() {
+        // Create the listen rule handler thread
+        HandlerThread listenRuleThread = new HandlerThread("MessageCatListenHandlerThread", 10);
+        listenRuleThread.start();
         // Create the connection handler thread
         HandlerThread thread = new HandlerThread("MessageCatNetworkingHandlerThread", 10);
         thread.start();
 
+        this.listenRuleHandlerLooper = listenRuleThread.getLooper();
         this.connectionHandlerLooper = thread.getLooper();
+        this.listenRuleHandler = new ListenRuleHandler(this, this.listenRuleHandlerLooper);
         this.connectionHandler = new ConnectionHandler(this, this.connectionHandlerLooper);
 
         // Initialise the connection to the server
         connectionHandler.sendEmptyMessage(0);
+        listenRuleHandler.sendEmptyMessage(0);
 
         // Try and find auth data
         File authDataFile = new File(getFilesDir(), "UserData.bin");
@@ -400,6 +446,20 @@ public class NetworkerService extends Service implements Serializable {
                 JSONObject requestData = new JSONObject();
                 requestData.put("type", RequestType.Authenticate);
                 requestData.put("data", new ObjectContainer(userData));
+
+                this.SendListenRuleRequest(new ListenRuleRequest(new IListenRuleCallback() {
+                    @Override
+                    public void callback(Object response) {
+
+                    }
+                }, new IRequestCallback() {
+                    @Override
+                    public void callback(Result result, Object response) {
+                        if (response == null) {
+                            startConnectionHandler();
+                        }
+                    }
+                }, requestData));
 
                 // Send the authentication request
                 this.SendRequest(new Request(new IRequestCallback() {
@@ -434,9 +494,10 @@ public class NetworkerService extends Service implements Serializable {
                                 e.printStackTrace();
                             }
 
+                            /* TODO Notifier routine should be done through listen rule handler now
                             NotifierRoutine notifierRoutine = new NotifierRoutine();
                             notifierRoutine.setDaemon(true);
-                            notifierRoutine.start();
+                            notifierRoutine.start();*/
                         }
 
                         waitingForResponse = false;

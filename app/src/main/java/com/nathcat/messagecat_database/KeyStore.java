@@ -12,13 +12,35 @@ import java.util.HashMap;
  */
 public class KeyStore {
     private HashMap<Integer, KeyPair> data;
-    private final File file;
+    private File dataFile;
+
+    /**
+     * Default constructor
+     */
+    public KeyStore() throws IOException {
+        dataFile = new File("Assets/Data/KeyStore.bin");
+
+        try {
+            // Try to read the data file
+            data = this.ReadFromFile();
+
+        } catch (FileNotFoundException e) {  // Thrown if the file does not exist
+            // Create a new empty hash map and create a new file for it
+            data = new HashMap<Integer, KeyPair>();
+            this.WriteToFile();
+
+        } catch (IOException | ClassNotFoundException e) {  // Potentially thrown by I/O operations
+            e.printStackTrace();
+        }
+
+        assert this.data != null;
+    }
 
     /**
      * Default constructor
      */
     public KeyStore(File file) throws IOException {
-        this.file = file;
+        this.dataFile = file;
 
         try {
             // Try to read the data file
@@ -43,7 +65,7 @@ public class KeyStore {
      * @throws ClassNotFoundException Thrown if the Serialized class cannot be found
      */
     public HashMap<Integer, KeyPair> ReadFromFile() throws IOException, ClassNotFoundException {
-        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file));
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(this.dataFile));
         return (HashMap<Integer, KeyPair>) ois.readObject();
     }
 
@@ -52,8 +74,10 @@ public class KeyStore {
      * @throws IOException Can be thrown by I/O operations
      */
     public void WriteToFile() throws IOException {
-        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(file));
+        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(this.dataFile));
         oos.writeObject(data);
+        oos.flush();
+        oos.close();
     }
 
     /**
@@ -89,9 +113,9 @@ public class KeyStore {
     }
 
     /**
-     * Add a new key pair, using a specified id
+     * Add a new key pair, using a given id
+     * @param id The id of the key pair
      * @param pair The KeyPair to add
-     * @param id The ID to use when adding the key pair
      * @return The result code
      */
     public Result AddKeyPair(int id, KeyPair pair) {

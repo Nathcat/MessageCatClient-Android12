@@ -24,6 +24,7 @@ public class ConnectionHandler extends Handler {
     public KeyPair keyPair = null;         // The client's key pair
     public KeyPair serverKeyPair = null;   // The server's key pair
     public final Context context;          // The context this handler was created in
+    public int connectionHandlerId;        // The identifier of the connection handler this handler has connected to
 
     public ConnectionHandler(Context context, Looper looper) {
         super(looper);  // Handler constructor
@@ -36,9 +37,9 @@ public class ConnectionHandler extends Handler {
      * @param obj The object to send
      * @throws IOException Thrown in case of I/O issues
      */
-    private void Send(Object obj) throws IOException {
-        this.oos.writeObject(obj);
-        this.oos.flush();
+    public void Send(Object obj) throws IOException {
+        oos.writeObject(obj);
+        oos.flush();
     }
 
     /**
@@ -47,8 +48,8 @@ public class ConnectionHandler extends Handler {
      * @throws IOException Thrown by I/O issues
      * @throws ClassNotFoundException Thrown if the required class cannot be found
      */
-    private Object Receive() throws IOException, ClassNotFoundException {
-        return this.ois.readObject();
+    public Object Receive() throws IOException, ClassNotFoundException {
+        return ois.readObject();
     }
 
     /**
@@ -63,7 +64,7 @@ public class ConnectionHandler extends Handler {
         if (msg.what == 0) {
             try {
                 // Try to connect to the server
-                this.s = new Socket("192.168.1.26", 1234);
+                this.s = new Socket("192.168.181.226", 1234);
                 this.s.setSoTimeout(20000);
                 this.oos = new ObjectOutputStream(s.getOutputStream());
                 this.ois = new ObjectInputStream(s.getInputStream());
@@ -74,7 +75,9 @@ public class ConnectionHandler extends Handler {
 
                 this.Send(new KeyPair(this.keyPair.pub, null));
 
-            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException e) {
+                this.connectionHandlerId = (int) this.serverKeyPair.decryptBigObject((EncryptedObject[]) this.Receive());
+
+            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
                 e.printStackTrace();
             }
 

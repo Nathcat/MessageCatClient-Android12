@@ -102,12 +102,26 @@ public class Handler extends Thread {
         } catch (IOException e) {
             this.DebugLog("Failed to close socket (" + e.getMessage() + ")");
         }
+
+        boolean emptyPass = false;
+        while (!emptyPass) {
+            emptyPass = true;
+
+            for (int i = 0 ; i < this.server.listenRules.size(); i++) {
+                if (this.server.listenRules.get(i).handler.equals(this)) {
+                    this.server.listenRules.remove(i);
+                    emptyPass = false;
+                    break;
+                }
+            }
+        }
     }
 
     /**
      * Parse an RSA string, i.e a string of RSA encrypted chars separated by a ',' character.
      * @param s The RSA string to parse
      * @return BigInteger array of encrypted chars
+     * @deprecated
      */
     public BigInteger[] ParseRSAString(String s) {
         String[] splitString = s.split(",");
