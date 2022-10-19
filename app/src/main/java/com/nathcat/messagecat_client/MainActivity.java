@@ -27,7 +27,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.RSA.PublicKeyException;
 import com.nathcat.messagecat_client.databinding.ActivityMainBinding;
 import com.nathcat.messagecat_database.KeyStore;
@@ -187,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetUser);
         request.put("selector", "displayName");
-        request.put("data", new ObjectContainer(new User(-1, null, null, displayName, null, null)));
+        request.put("data", new User(-1, null, null, displayName, null, null));
 
         // Send the request
         networkerService.SendRequest(new NetworkerService.Request(
@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
         // Create a request to send a friend request
         JSONObject request = new JSONObject();
         request.put("type", RequestType.SendFriendRequest);
-        request.put("data", new ObjectContainer(new FriendRequest(-1, networkerService.user.UserID, user.UserID, new Date().getTime())));
+        request.put("data", new FriendRequest(-1, networkerService.user.UserID, user.UserID, new Date().getTime()));
 
         // Send the request to the server
         networkerService.SendRequest(new NetworkerService.Request(
@@ -400,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
         // Create a request to accept the invite
         JSONObject request = new JSONObject();
         request.put("type", type);
-        request.put("data", new ObjectContainer(invite));
+        request.put("data", invite);
 
         Object finalInvite = invite;
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
@@ -429,7 +429,7 @@ public class MainActivity extends AppCompatActivity {
                     // Request the chat as we need it's public key id to store it in the internal key store
                     JSONObject chatRequest = new JSONObject();
                     chatRequest.put("type", RequestType.GetChat);
-                    chatRequest.put("data", new ObjectContainer(new Chat(((ChatInvite) finalInvite).ChatID, "", "", -1)));
+                    chatRequest.put("data", new Chat(((ChatInvite) finalInvite).ChatID, "", "", -1));
 
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override
@@ -505,7 +505,7 @@ public class MainActivity extends AppCompatActivity {
         // Create a request to decline the invite
         JSONObject request = new JSONObject();
         request.put("type", type);
-        request.put("data", new ObjectContainer(invite));
+        request.put("data", invite);
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -543,7 +543,7 @@ public class MainActivity extends AppCompatActivity {
         // Get the chat's public key from the server
         JSONObject keyRequest = new JSONObject();
         keyRequest.put("type", RequestType.GetPublicKey);
-        keyRequest.put("data", new ObjectContainer(chat.PublicKeyID));
+        keyRequest.put("data", chat.PublicKeyID);
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -555,10 +555,10 @@ public class MainActivity extends AppCompatActivity {
 
                 // Encrypt the message contents using the public key
                 assert response != null;
-                KeyPair publicKey = (KeyPair) ((ObjectContainer) response).obj;
-                EncryptedObject[] eContent = null;
+                KeyPair publicKey = (KeyPair) response;
+                EncryptedObject eContent = null;
                 try {
-                    eContent = publicKey.encryptBigObject(messageContent);
+                    eContent = publicKey.encrypt(messageContent);
 
                 } catch (PublicKeyException e) {
                     MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
@@ -571,8 +571,8 @@ public class MainActivity extends AppCompatActivity {
                 Message message = new Message(networkerService.user.UserID, chat.ChatID, new Date().getTime(), eContent);
 
                 JSONObject sendRequest = new JSONObject();
-                sendRequest.put("type", new ObjectContainer(RequestType.SendMessage));
-                sendRequest.put("data", new ObjectContainer(message));
+                sendRequest.put("type", RequestType.SendMessage);
+                sendRequest.put("data", message);
 
                 networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                     @Override

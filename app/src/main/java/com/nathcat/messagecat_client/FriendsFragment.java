@@ -13,7 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Friendship;
 import com.nathcat.messagecat_database_entities.User;
@@ -51,7 +51,7 @@ public class FriendsFragment extends Fragment {
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetFriendship);
         request.put("selector", "userID");
-        request.put("data", new ObjectContainer(new Friendship(-1, networkerService.user.UserID, -1, null)));
+        request.put("data", new Friendship(-1, networkerService.user.UserID, -1, null));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -72,7 +72,7 @@ public class FriendsFragment extends Fragment {
                     JSONObject friendRequest = new JSONObject();
                     friendRequest.put("type", RequestType.GetUser);
                     friendRequest.put("selector", "id");
-                    friendRequest.put("data", new ObjectContainer(new User(friendships[i].FriendID, null, null, null, null, null)));
+                    friendRequest.put("data", new User(friendships[i].FriendID, null, null, null, null, null));
 
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override

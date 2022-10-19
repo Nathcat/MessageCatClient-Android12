@@ -13,7 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.nathcat.RSA.KeyPair;
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.RSA.RSA;
 import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.Result;
@@ -138,7 +138,7 @@ public class InviteToChatActivity extends AppCompatActivity {
         // Create and send the request
         JSONObject request = new JSONObject();
         request.put("type", RequestType.SendChatInvite);
-        request.put("data", new ObjectContainer(new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1)));
+        request.put("data", new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1));
         request.put("keyPair", new KeyPair(null, pair.pri));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
@@ -186,8 +186,8 @@ public class InviteToChatActivity extends AppCompatActivity {
         // Send the request to the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.AddChat);
-        request.put("data", new ObjectContainer(new Chat(-1, chatName, chatDesc, -1)));
-        request.put("keyPair", new ObjectContainer(new KeyPair(chatKeyPair.pub, null)));
+        request.put("data", new Chat(-1, chatName, chatDesc, -1));
+        request.put("keyPair", new KeyPair(chatKeyPair.pub, null));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -233,7 +233,7 @@ public class InviteToChatActivity extends AppCompatActivity {
                 // Send a chat invite
                 JSONObject inviteRequest = new JSONObject();
                 inviteRequest.put("type", RequestType.SendChatInvite);
-                inviteRequest.put("data", new ObjectContainer(new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1)));
+                inviteRequest.put("data", new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1));
                 inviteRequest.put("keyPair", new KeyPair(null, chatKeyPair.pri));
 
                 networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {

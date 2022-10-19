@@ -19,7 +19,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.MessageQueue;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
@@ -105,15 +105,12 @@ public class NetworkerService extends Service implements Serializable {
     /**
      * Passed to the active ListenRuleHandler to create a new listen rule on the server
      */
-    public static class ListenRuleRequest {
-        public final IListenRuleCallback callback;      // Called when the listen rule is triggered
-        public final IRequestCallback requestCallback;  // Called when the request is completed
-        public final Object request;                    // The request object to send to the server
+    public static class ListenRuleRequest extends Request {
+        public final IListenRuleCallback lrCallback;      // Called when the listen rule is triggered
 
-        public ListenRuleRequest(IListenRuleCallback callback, IRequestCallback requestCallback, Object request) {
-            this.callback = callback;
-            this.requestCallback = requestCallback;
-            this.request = request;
+        public ListenRuleRequest(IListenRuleCallback lrCallback, IRequestCallback callback, Object request) {
+            super(callback, request);
+            this.lrCallback = lrCallback;
         }
     }
 
@@ -179,7 +176,7 @@ public class NetworkerService extends Service implements Serializable {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetFriendRequests);
                 request.put("selector", "recipientID");
-                request.put("data", new ObjectContainer(new FriendRequest(0, 0, user.UserID, 0)));
+                request.put("data", new FriendRequest(0, 0, user.UserID, 0));
 
                 long finalLastCheckedTime = lastCheckedTime;
 
@@ -197,7 +194,7 @@ public class NetworkerService extends Service implements Serializable {
                                     JSONObject senderRequest = new JSONObject();
                                     senderRequest.put("type", RequestType.GetUser);
                                     senderRequest.put("selector", "id");
-                                    senderRequest.put("data", new ObjectContainer(new User(fr.SenderID, "", "", "", "", "")));
+                                    senderRequest.put("data", new User(fr.SenderID, "", "", "", "", ""));
 
                                     SendRequest(new Request(new IRequestCallback() {
                                         @Override
@@ -217,7 +214,7 @@ public class NetworkerService extends Service implements Serializable {
                 request = new JSONObject();
                 request.put("type", RequestType.GetChatInvite);
                 request.put("selector", "recipientID");
-                request.put("data", new ObjectContainer(new ChatInvite(0, 0, 0, user.UserID, 0, 0)));
+                request.put("data", new ChatInvite(0, 0, 0, user.UserID, 0, 0));
 
                 SendRequest(new Request(new IRequestCallback() {
                     @Override
@@ -234,7 +231,7 @@ public class NetworkerService extends Service implements Serializable {
                                     JSONObject senderRequest = new JSONObject();
                                     senderRequest.put("type", RequestType.GetUser);
                                     senderRequest.put("selector", "id");
-                                    senderRequest.put("data", new ObjectContainer(new User(ci.SenderID, "", "", "", "", "")));
+                                    senderRequest.put("data", new User(ci.SenderID, "", "", "", "", ""));
 
                                     SendRequest(new Request(new IRequestCallback() {
                                         @Override
@@ -259,7 +256,7 @@ public class NetworkerService extends Service implements Serializable {
                         for (int i = 0; i < chats.length; i++) {
                             request = new JSONObject();
                             request.put("type", RequestType.GetMessageQueue);
-                            request.put("data", new ObjectContainer(chats[i].ChatID));
+                            request.put("data", chats[i].ChatID);
 
                             SendRequest(new Request(new IRequestCallback() {
                                 @Override
@@ -284,7 +281,7 @@ public class NetworkerService extends Service implements Serializable {
                                                 JSONObject senderRequest = new JSONObject();
                                                 senderRequest.put("type", RequestType.GetUser);
                                                 senderRequest.put("selector", "id");
-                                                senderRequest.put("data", new ObjectContainer(new User((int) messageJSON.get("SenderID"), "", "", "", "", "")));
+                                                senderRequest.put("data", new User((int) messageJSON.get("SenderID"), "", "", "", "", ""));
 
                                                 SendRequest(new Request(new IRequestCallback() {
                                                     @Override
@@ -317,7 +314,6 @@ public class NetworkerService extends Service implements Serializable {
 
     public NotificationChannel notificationChannel;  // The notification channel to be used to send notifications
     private ConnectionHandler connectionHandler;     // The active connection handler
-    private ListenRuleHandler listenRuleHandler;     // The active listen rule handler
     private Looper connectionHandlerLooper;          // The Handler looper attached to the active connection handler
     private Looper listenRuleHandlerLooper;          // The Handler looper attached to the connection managing listening rules
     public boolean authenticated = false;            // Is the client currently authenticated
@@ -390,21 +386,6 @@ public class NetworkerService extends Service implements Serializable {
         connectionHandler.sendMessage(msg);
     }
 
-    /**
-     * Send a request to the server via the listen rule handler
-     * @param request The request object
-     */
-    public void SendListenRuleRequest(ListenRuleRequest request) {
-        this.waitingForResponse = true;  // Indicate that the client is waiting for a response
-        // Create the message to the connection handler
-        Message msg = listenRuleHandler.obtainMessage();
-        msg.obj = request;
-        msg.what = 1;
-
-        // Send the request to the connection handler to be sent off to the server
-        listenRuleHandler.sendMessage(msg);
-    }
-
     @Override
     public void onTaskRemoved(Intent intent) {
         System.out.println("Service task removed");
@@ -417,21 +398,15 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     public void startConnectionHandler() {
-        // Create the listen rule handler thread
-        HandlerThread listenRuleThread = new HandlerThread("MessageCatListenHandlerThread", 10);
-        listenRuleThread.start();
         // Create the connection handler thread
         HandlerThread thread = new HandlerThread("MessageCatNetworkingHandlerThread", 10);
         thread.start();
 
-        this.listenRuleHandlerLooper = listenRuleThread.getLooper();
         this.connectionHandlerLooper = thread.getLooper();
-        this.listenRuleHandler = new ListenRuleHandler(this, this.listenRuleHandlerLooper);
         this.connectionHandler = new ConnectionHandler(this, this.connectionHandlerLooper);
 
         // Initialise the connection to the server
         connectionHandler.sendEmptyMessage(0);
-        listenRuleHandler.sendEmptyMessage(0);
 
         // Try and find auth data
         File authDataFile = new File(getFilesDir(), "UserData.bin");
@@ -445,21 +420,7 @@ public class NetworkerService extends Service implements Serializable {
                 // Create the request and send it to the server
                 JSONObject requestData = new JSONObject();
                 requestData.put("type", RequestType.Authenticate);
-                requestData.put("data", new ObjectContainer(userData));
-
-                this.SendListenRuleRequest(new ListenRuleRequest(new IListenRuleCallback() {
-                    @Override
-                    public void callback(Object response) {
-
-                    }
-                }, new IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        if (response == null) {
-                            startConnectionHandler();
-                        }
-                    }
-                }, requestData));
+                requestData.put("data", userData);
 
                 // Send the authentication request
                 this.SendRequest(new Request(new IRequestCallback() {

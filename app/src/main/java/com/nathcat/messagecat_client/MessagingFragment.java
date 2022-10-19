@@ -13,7 +13,7 @@ import android.widget.Toast;
 
 import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.RSA.PrivateKeyException;
 import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.MessageQueue;
@@ -64,7 +64,7 @@ public class MessagingFragment extends Fragment {
                     // Create a request to get the message queue for this chat
                     JSONObject request = new JSONObject();
                     request.put("type", RequestType.GetMessageQueue);
-                    request.put("data", new ObjectContainer(chat.ChatID));
+                    request.put("data", chat.ChatID);
 
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override
@@ -76,7 +76,7 @@ public class MessagingFragment extends Fragment {
                             }
 
                             // Assign the message queue to the field
-                            messageQueue = (MessageQueue) ((ObjectContainer) ((ObjectContainer) response).obj).obj;
+                            messageQueue = (MessageQueue) response;
 
                             // Call the update message box function on the UI thread
                             // Passing the instance of the fragment class as a parameter
@@ -151,7 +151,7 @@ public class MessagingFragment extends Fragment {
         // Request the message queue from the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetMessageQueue);
-        request.put("data", new ObjectContainer(chat.ChatID));
+        request.put("data", chat.ChatID);
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -163,7 +163,7 @@ public class MessagingFragment extends Fragment {
                 }
 
                 // Assign the message queue to the field
-                messageQueue = (MessageQueue) ((ObjectContainer) ((ObjectContainer) response).obj).obj;
+                messageQueue = (MessageQueue) response;
 
                 // Call the update message box function on the UI thread
                 // Passing the instance of the fragment class as a parameter
@@ -178,12 +178,12 @@ public class MessagingFragment extends Fragment {
         ListenRule listenRule = new ListenRule(RequestType.SendMessage, "ChatID", this.chat.ChatID);
         JSONObject listenRuleRequest = new JSONObject();
         listenRuleRequest.put("type", RequestType.AddListenRule);
-        listenRuleRequest.put("data", new ObjectContainer(listenRule));
+        listenRuleRequest.put("data", listenRule);
 
-        networkerService.SendListenRuleRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+        networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
             @Override
             public void callback(Object response) {
-                updateMessageBox((Message) ((ObjectContainer) ((JSONObject) response).get("data")).obj);
+                updateMessageBox((Message) ((JSONObject) response).get("data"));
             }
         }, new NetworkerService.IRequestCallback() {
             @Override
@@ -204,9 +204,9 @@ public class MessagingFragment extends Fragment {
 
         JSONObject request = new JSONObject();
         request.put("type", RequestType.RemoveListenRule);
-        request.put("data", new ObjectContainer(listenRuleId));
+        request.put("data", listenRuleId);
 
-        networkerService.SendListenRuleRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+        networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
             @Override
             public void callback(Object response) {
                 NetworkerService.IListenRuleCallback.super.callback(response);
@@ -247,7 +247,7 @@ public class MessagingFragment extends Fragment {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetUser);
                 request.put("selector", "id");
-                request.put("data", new ObjectContainer(new User(message.SenderID, null, null, null, null, null)));
+                request.put("data", new User(message.SenderID, null, null, null, null, null));
 
                 fragment.networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                     @Override
@@ -257,7 +257,7 @@ public class MessagingFragment extends Fragment {
                         // Decrypt the message before passing it to the fragment
                         String content = null;
                         try {
-                            content = (String) privateKey.decryptBigObject((EncryptedObject[]) message.Content);
+                            content = (String) privateKey.decrypt((EncryptedObject) message.Content);
 
                         } catch (PrivateKeyException e) {
                             e.printStackTrace();
@@ -283,7 +283,7 @@ public class MessagingFragment extends Fragment {
                 // Decrypt the message contents
                 String content = null;
                 try {
-                    content = (String) privateKey.decryptBigObject((EncryptedObject[]) message.Content);
+                    content = (String) privateKey.decrypt((EncryptedObject) message.Content);
 
                 } catch (PrivateKeyException e) {
                     e.printStackTrace();
@@ -315,7 +315,7 @@ public class MessagingFragment extends Fragment {
             JSONObject request = new JSONObject();
             request.put("type", RequestType.GetUser);
             request.put("selector", "id");
-            request.put("data", new ObjectContainer(new User((int) newMessage.SenderID, null, null, null, null, null)));
+            request.put("data", new User(newMessage.SenderID, null, null, null, null, null));
 
             networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                 @Override
@@ -325,7 +325,7 @@ public class MessagingFragment extends Fragment {
                     // Decrypt the message before passing it to the fragment
                     String content = null;
                     try {
-                        content = (String) privateKey.decryptBigObject((EncryptedObject[]) newMessage.Content);
+                        content = (String) privateKey.decrypt((EncryptedObject) newMessage.Content);
 
                     } catch (PrivateKeyException e) {
                         e.printStackTrace();
@@ -351,7 +351,7 @@ public class MessagingFragment extends Fragment {
             // Decrypt the contents of the message
             String content = null;
             try {
-                content = (String) privateKey.decryptBigObject((EncryptedObject[]) newMessage.Content);
+                content = (String) privateKey.decrypt((EncryptedObject) newMessage.Content);
 
             } catch (PrivateKeyException e) {
                 e.printStackTrace();

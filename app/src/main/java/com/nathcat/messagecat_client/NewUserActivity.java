@@ -22,7 +22,7 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.User;
@@ -112,20 +112,8 @@ public class NewUserActivity extends AppCompatActivity {
      */
     private String randomPassword() {
         Random r = new Random();
-        StringBuilder sb = new StringBuilder();
 
-        // Add a series of random integers to the password string
-        int length = r.nextInt();
-        while (length <= 0) {
-            length = r.nextInt(20);
-        }
-
-        for (int i = 0; i < length; i++) {
-            sb.append(r.nextInt(1000));
-        }
-
-        // Return the final string
-        return String.valueOf(sb.toString().hashCode());
+        return String.valueOf(r.nextInt());
     }
 
     public void onSubmitButtonClicked(View v) {
@@ -138,7 +126,7 @@ public class NewUserActivity extends AppCompatActivity {
 
         JSONObject request = new JSONObject();
         request.put("type", RequestType.AddUser);
-        request.put("data", new ObjectContainer(new User(-1, phoneNumberEntry.getText().toString(), password, displayNameEntry.getText().toString(), new Date().toString(), "default.png")));
+        request.put("data", new User(-1, phoneNumberEntry.getText().toString(), password, displayNameEntry.getText().toString(), new Date().toString(), "default.png"));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -151,7 +139,11 @@ public class NewUserActivity extends AppCompatActivity {
                 // Check if the response is null
                 // If this is the case then the entry had duplicate data
                 if (response == null) {
-                    NewUserActivity.this.runOnUiThread(() -> Toast.makeText(NewUserActivity.this, "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show());
+                    NewUserActivity.this.runOnUiThread(() -> {
+                        Toast.makeText(NewUserActivity.this, "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show();
+                        loadingWheel.setVisibility(View.GONE);
+                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    });
                     return;
                 }
 
@@ -171,7 +163,7 @@ public class NewUserActivity extends AppCompatActivity {
                     // Now start an authentication request and start up the loading screen
                     JSONObject authRequest = new JSONObject();
                     authRequest.put("type", RequestType.Authenticate);
-                    authRequest.put("data", new ObjectContainer(response));
+                    authRequest.put("data", response);
 
                     // Send the auth request and start the loading activity
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
@@ -194,12 +186,7 @@ public class NewUserActivity extends AppCompatActivity {
                         }
                     }, authRequest));
 
-                    ((Activity) NewUserActivity.this).runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                        }
-                    });
+                    NewUserActivity.this.runOnUiThread(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE));
 
                     startActivity(new Intent(NewUserActivity.this, LoadingActivity.class));
 

@@ -10,7 +10,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.User;

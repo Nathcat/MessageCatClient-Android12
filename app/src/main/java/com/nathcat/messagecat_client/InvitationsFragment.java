@@ -11,7 +11,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
@@ -71,7 +71,7 @@ public class InvitationsFragment extends Fragment {
         // Request incoming friend requests from the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetFriendRequests);
-        request.put("data", new ObjectContainer(new FriendRequest(-1, -1, networkerService.user.UserID, -1)));
+        request.put("data", new FriendRequest(-1, -1, networkerService.user.UserID, -1));
         request.put("selector", "recipientID");
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
@@ -91,7 +91,7 @@ public class InvitationsFragment extends Fragment {
                     JSONObject userRequest = new JSONObject();
                     userRequest.put("type", RequestType.GetUser);
                     userRequest.put("selector", "id");
-                    userRequest.put("data", new ObjectContainer(new User(fr.SenderID, "", "", "", "", "")));
+                    userRequest.put("data", new User(fr.SenderID, "", "", "", "", ""));
 
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override
@@ -123,7 +123,7 @@ public class InvitationsFragment extends Fragment {
         // Request incoming chat requests from the server
         JSONObject chatInviteRequest = new JSONObject();
         chatInviteRequest.put("type", RequestType.GetChatInvite);
-        chatInviteRequest.put("data", new ObjectContainer(new ChatInvite(-1, -1, -1, networkerService.user.UserID, -1, -1)));
+        chatInviteRequest.put("data", new ChatInvite(-1, -1, -1, networkerService.user.UserID, -1, -1));
         chatInviteRequest.put("selector", "recipientID");
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
@@ -144,7 +144,7 @@ public class InvitationsFragment extends Fragment {
                     JSONObject userRequest = new JSONObject();
                     userRequest.put("type", RequestType.GetUser);
                     userRequest.put("selector", "id");
-                    userRequest.put("data", new ObjectContainer(new User(inv.SenderID, "", "", "", "", "")));
+                    userRequest.put("data", new User(inv.SenderID, "", "", "", "", ""));
 
                     networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override
