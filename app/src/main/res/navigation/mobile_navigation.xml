@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mobile_navigation"
+    app:startDestination="@id/chatsFragment">
+    <fragment
+        android:id="@+id/chatsFragment"
+        android:name="com.nathcat.messagecat_client.ChatsFragment"
+        android:label="fragment_chats"
+        tools:layout="@layout/fragment_chats" />
+    <fragment
+        android:id="@+id/findPeopleFragment"
+        android:name="com.nathcat.messagecat_client.FindPeopleFragment"
+        android:label="fragment_find_people"
+        tools:layout="@layout/fragment_find_people" />
+    <fragment
+        android:id="@+id/friendsFragment"
+        android:name="com.nathcat.messagecat_client.FriendsFragment"
+        android:label="fragment_friends"
+        tools:layout="@layout/fragment_friends" />
+    <fragment
+        android:id="@+id/invitationsFragment"
+        android:name="com.nathcat.messagecat_client.InvitationsFragment"
+        android:label="fragment_invitations"
+        tools:layout="@layout/fragment_invitations" />
+    <fragment
+        android:id="@+id/messagingFragment"
+        android:name="com.nathcat.messagecat_client.MessagingFragment"
+        android:label="fragment_messaging"
+        tools:layout="@layout/fragment_messaging" />
+</navigation>

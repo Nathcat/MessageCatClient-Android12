@@ -1,6 +1,5 @@
 package com.nathcat.messagecat_client;
 
-import android.app.IntentService;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Service;
@@ -20,7 +19,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.MessageQueue;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
@@ -104,6 +103,25 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     /**
+     * Passed to the active ListenRuleHandler to create a new listen rule on the server
+     */
+    public static class ListenRuleRequest extends Request {
+        public final IListenRuleCallback lrCallback;      // Called when the listen rule is triggered
+
+        public ListenRuleRequest(IListenRuleCallback lrCallback, IRequestCallback callback, Object request) {
+            super(callback, request);
+            this.lrCallback = lrCallback;
+        }
+    }
+
+    /**
+     * Listen rule callback interface, called when a listen rule is triggered
+     */
+    public interface IListenRuleCallback {
+        default void callback(Object response) {}
+    }
+
+    /**
      * Used by the main application activity (UI thread) to get the active instance of this service
      */
     public class NetworkerServiceBinder extends Binder {
@@ -118,6 +136,7 @@ public class NetworkerService extends Service implements Serializable {
 
     /**
      * Process which manages notifications while the application is not open
+     * @deprecated
      */
     private class NotifierRoutine extends Thread {
         @Override
@@ -157,7 +176,7 @@ public class NetworkerService extends Service implements Serializable {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetFriendRequests);
                 request.put("selector", "recipientID");
-                request.put("data", new ObjectContainer(new FriendRequest(0, 0, user.UserID, 0)));
+                request.put("data", new FriendRequest(0, 0, user.UserID, 0));
 
                 long finalLastCheckedTime = lastCheckedTime;
 
@@ -175,7 +194,7 @@ public class NetworkerService extends Service implements Serializable {
                                     JSONObject senderRequest = new JSONObject();
                                     senderRequest.put("type", RequestType.GetUser);
                                     senderRequest.put("selector", "id");
-                                    senderRequest.put("data", new ObjectContainer(new User(fr.SenderID, "", "", "", "", "")));
+                                    senderRequest.put("data", new User(fr.SenderID, "", "", "", "", ""));
 
                                     SendRequest(new Request(new IRequestCallback() {
                                         @Override
@@ -195,7 +214,7 @@ public class NetworkerService extends Service implements Serializable {
                 request = new JSONObject();
                 request.put("type", RequestType.GetChatInvite);
                 request.put("selector", "recipientID");
-                request.put("data", new ObjectContainer(new ChatInvite(0, 0, 0, user.UserID, 0, 0)));
+                request.put("data", new ChatInvite(0, 0, 0, user.UserID, 0, 0));
 
                 SendRequest(new Request(new IRequestCallback() {
                     @Override
@@ -212,7 +231,7 @@ public class NetworkerService extends Service implements Serializable {
                                     JSONObject senderRequest = new JSONObject();
                                     senderRequest.put("type", RequestType.GetUser);
                                     senderRequest.put("selector", "id");
-                                    senderRequest.put("data", new ObjectContainer(new User(ci.SenderID, "", "", "", "", "")));
+                                    senderRequest.put("data", new User(ci.SenderID, "", "", "", "", ""));
 
                                     SendRequest(new Request(new IRequestCallback() {
                                         @Override
@@ -237,12 +256,20 @@ public class NetworkerService extends Service implements Serializable {
                         for (int i = 0; i < chats.length; i++) {
                             request = new JSONObject();
                             request.put("type", RequestType.GetMessageQueue);
-                            request.put("data", new ObjectContainer(chats[i].ChatID));
+                            request.put("data", chats[i].ChatID);
 
                             SendRequest(new Request(new IRequestCallback() {
                                 @Override
                                 public void callback(Result result, Object response) {
                                     waitingForResponse = false;
+                                    if (result == Result.FAILED) {
+                                        System.exit(1);
+                                    }
+
+                                    if (response == null) {
+                                        return;
+                                    }
+
                                     // Get the messages in the message queue as a JSON string
                                     String[] messageStrings = ((MessageQueue) response).GetJSONString();
                                     for (String messageString : messageStrings) {
@@ -254,7 +281,7 @@ public class NetworkerService extends Service implements Serializable {
                                                 JSONObject senderRequest = new JSONObject();
                                                 senderRequest.put("type", RequestType.GetUser);
                                                 senderRequest.put("selector", "id");
-                                                senderRequest.put("data", new ObjectContainer(new User((int) messageJSON.get("SenderID"), "", "", "", "", "")));
+                                                senderRequest.put("data", new User((int) messageJSON.get("SenderID"), "", "", "", "", ""));
 
                                                 SendRequest(new Request(new IRequestCallback() {
                                                     @Override
@@ -288,6 +315,7 @@ public class NetworkerService extends Service implements Serializable {
     public NotificationChannel notificationChannel;  // The notification channel to be used to send notifications
     private ConnectionHandler connectionHandler;     // The active connection handler
     private Looper connectionHandlerLooper;          // The Handler looper attached to the active connection handler
+    private Looper listenRuleHandlerLooper;          // The Handler looper attached to the connection managing listening rules
     public boolean authenticated = false;            // Is the client currently authenticated
     public boolean waitingForResponse = false;       // Is the client currently waiting for a response
     private final NetworkerServiceBinder binder = new NetworkerServiceBinder();
@@ -344,7 +372,7 @@ public class NetworkerService extends Service implements Serializable {
     }
 
     /**
-     * Send a request to the server
+     * Send a request to the server via the connection handler
      * @param request The request object
      */
     public void SendRequest(Request request) {
@@ -353,6 +381,7 @@ public class NetworkerService extends Service implements Serializable {
         Message msg = connectionHandler.obtainMessage();
         msg.obj = request;
         msg.what = 1;
+
         // Send the request to the connection handler to be sent off to the server
         connectionHandler.sendMessage(msg);
     }
@@ -391,7 +420,7 @@ public class NetworkerService extends Service implements Serializable {
                 // Create the request and send it to the server
                 JSONObject requestData = new JSONObject();
                 requestData.put("type", RequestType.Authenticate);
-                requestData.put("data", new ObjectContainer(userData));
+                requestData.put("data", userData);
 
                 // Send the authentication request
                 this.SendRequest(new Request(new IRequestCallback() {
@@ -426,9 +455,10 @@ public class NetworkerService extends Service implements Serializable {
                                 e.printStackTrace();
                             }
 
+                            /* TODO Notifier routine should be done through listen rule handler now
                             NotifierRoutine notifierRoutine = new NotifierRoutine();
                             notifierRoutine.setDaemon(true);
-                            notifierRoutine.start();
+                            notifierRoutine.start();*/
                         }
 
                         waitingForResponse = false;

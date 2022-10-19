@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".FindPeopleFragment"
+    android:orientation="vertical"
+    android:theme="@style/Theme.MessageCat">
+
+
+    <LinearLayout
+        android:id="@+id/UserSearchBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:theme="@style/Theme.MessageCat">
+
+        <EditText
+            android:id="@+id/userSearchDisplayNameEntry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ems="10"
+            android:hint="@string/displayName"
+            android:inputType="textPersonName"
+            android:theme="@style/Theme.MessageCat"/>
+
+        <ImageButton
+            android:id="@+id/userSearchButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/search_button"
+            android:onClick="onSearchButtonClicked"
+            android:src="@android:drawable/ic_menu_search"
+            android:theme="@style/Theme.MessageCat"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/SearchResultFragmentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:theme="@style/Theme.MessageCat">
+
+        <TextView
+            android:id="@+id/noResultsMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/no_search_performed_message"
+            android:textAlignment="center"
+            android:textSize="20sp"
+            android:theme="@style/Theme.MessageCat"/>
+
+    </LinearLayout>
+
+</LinearLayout>

@@ -10,9 +10,15 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.nathcat.RSA.*;
 import com.nathcat.messagecat_database.Result;
+import com.nathcat.messagecat_server.ListenRule;
+import com.nathcat.messagecat_server.RequestType;
+
+import org.json.simple.JSONObject;
 
 /**
  * Manages a connection to the server
@@ -24,6 +30,20 @@ public class ConnectionHandler extends Handler {
     public KeyPair keyPair = null;         // The client's key pair
     public KeyPair serverKeyPair = null;   // The server's key pair
     public final Context context;          // The context this handler was created in
+    public int connectionHandlerId;        // The identifier of the connection handler this handler has connected to
+    public ListenRuleCallbackHandler callbackHandler;
+
+    public class ListenRuleRecord {
+        public final ListenRule listenRule;
+        public final NetworkerService.IListenRuleCallback callback;
+
+        private ListenRuleRecord(ListenRule listenRule, NetworkerService.IListenRuleCallback callback) {
+            this.listenRule = listenRule;
+            this.callback = callback;
+        }
+    }
+
+    public ArrayList<ListenRuleRecord> listenRules = new ArrayList<>();
 
     public ConnectionHandler(Context context, Looper looper) {
         super(looper);  // Handler constructor
@@ -36,9 +56,9 @@ public class ConnectionHandler extends Handler {
      * @param obj The object to send
      * @throws IOException Thrown in case of I/O issues
      */
-    private void Send(Object obj) throws IOException {
-        this.oos.writeObject(obj);
-        this.oos.flush();
+    public void Send(Object obj) throws IOException {
+        oos.writeObject(obj);
+        oos.flush();
     }
 
     /**
@@ -47,8 +67,8 @@ public class ConnectionHandler extends Handler {
      * @throws IOException Thrown by I/O issues
      * @throws ClassNotFoundException Thrown if the required class cannot be found
      */
-    private Object Receive() throws IOException, ClassNotFoundException {
-        return this.ois.readObject();
+    public Object Receive() throws IOException, ClassNotFoundException {
+        return ois.readObject();
     }
 
     /**
@@ -74,7 +94,13 @@ public class ConnectionHandler extends Handler {
 
                 this.Send(new KeyPair(this.keyPair.pub, null));
 
-            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException e) {
+                this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+
+                callbackHandler = new ListenRuleCallbackHandler(this);
+                callbackHandler.setDaemon(true);
+                callbackHandler.start();
+
+            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
                 e.printStackTrace();
             }
 
@@ -98,16 +124,62 @@ public class ConnectionHandler extends Handler {
         // Get the request object from the message
         NetworkerService.Request request = (NetworkerService.Request) msg.obj;
 
-        try {
-            // Send the request
-            this.Send(this.serverKeyPair.encryptBigObject(request.request));
-            // Receive the response and perform the callback from the request object
-            request.callback.callback(Result.SUCCESS, ((ObjectContainer) this.keyPair.decryptBigObject((EncryptedObject[]) this.Receive())).obj);
+        if (((JSONObject) request.request).get("type") == RequestType.AddListenRule) {
+            NetworkerService.ListenRuleRequest lrRequest = (NetworkerService.ListenRuleRequest) request;
 
-        } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException e) {
-            e.printStackTrace();
-            // Perform callback with failure code
-            request.callback.callback(Result.FAILED, null);
+            try {
+                ListenRule rule = (ListenRule) ((JSONObject) lrRequest.request).get("data");
+                rule.connectionHandlerId = this.callbackHandler.connectionHandlerId;
+                ((JSONObject) lrRequest.request).put("data", rule);
+
+                // Send the request
+                this.Send(this.serverKeyPair.encrypt(lrRequest.request));
+                // Receive the ID
+                int id = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+                rule = (ListenRule) ((JSONObject) lrRequest.request).get("data");
+                rule.connectionHandlerId = this.callbackHandler.connectionHandlerId;
+                rule.setId(id);
+                // Add the listen rule to the array along with it's callback
+                this.listenRules.add(new ListenRuleRecord(rule, lrRequest.lrCallback));
+                lrRequest.callback.callback(Result.SUCCESS, id);
+
+            } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException | ListenRule.IDAlreadySetException e) {
+                e.printStackTrace();
+                lrRequest.callback.callback(Result.FAILED, null);
+            }
+        }
+        else if (((JSONObject) request.request).get("type") == RequestType.RemoveListenRule) {
+            NetworkerService.ListenRuleRequest lrRequest = (NetworkerService.ListenRuleRequest) request;
+
+            try {
+                // Remove the listen rule from the array
+                for (int i = 0; i < this.listenRules.size(); i++) {
+                    if (this.listenRules.get(i).listenRule.getId() == (int) ((JSONObject) lrRequest.request).get("data")) {
+                        this.listenRules.remove(i);
+                        break;
+                    }
+                }
+                // Send the request
+                this.Send(this.serverKeyPair.encrypt(lrRequest.request));
+                lrRequest.callback.callback(Result.SUCCESS, null);
+
+            } catch (IOException | PublicKeyException e) {
+                e.printStackTrace();
+                lrRequest.callback.callback(Result.FAILED, null);
+            }
+        } else {
+
+            try {
+                // Send the request
+                this.Send(this.serverKeyPair.encrypt(request.request));
+                // Receive the response and perform the callback from the request object
+                request.callback.callback(Result.SUCCESS, this.keyPair.decrypt((EncryptedObject) this.Receive()));
+
+            } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException e) {
+                e.printStackTrace();
+                // Perform callback with failure code
+                request.callback.callback(Result.FAILED, null);
+            }
         }
     }
 }

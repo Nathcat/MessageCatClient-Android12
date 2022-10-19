@@ -12,11 +12,36 @@ import java.util.HashMap;
  */
 public class KeyStore {
     private HashMap<Integer, KeyPair> data;
+    private File dataFile;
 
     /**
      * Default constructor
      */
     public KeyStore() throws IOException {
+        dataFile = new File("Assets/Data/KeyStore.bin");
+
+        try {
+            // Try to read the data file
+            data = this.ReadFromFile();
+
+        } catch (FileNotFoundException e) {  // Thrown if the file does not exist
+            // Create a new empty hash map and create a new file for it
+            data = new HashMap<Integer, KeyPair>();
+            this.WriteToFile();
+
+        } catch (IOException | ClassNotFoundException e) {  // Potentially thrown by I/O operations
+            e.printStackTrace();
+        }
+
+        assert this.data != null;
+    }
+
+    /**
+     * Default constructor
+     */
+    public KeyStore(File file) throws IOException {
+        this.dataFile = file;
+
         try {
             // Try to read the data file
             data = this.ReadFromFile();
@@ -40,7 +65,7 @@ public class KeyStore {
      * @throws ClassNotFoundException Thrown if the Serialized class cannot be found
      */
     public HashMap<Integer, KeyPair> ReadFromFile() throws IOException, ClassNotFoundException {
-        ObjectInputStream ois = new ObjectInputStream(new FileInputStream("Assets/Data/KeyStore.bin"));
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(this.dataFile));
         return (HashMap<Integer, KeyPair>) ois.readObject();
     }
 
@@ -49,8 +74,10 @@ public class KeyStore {
      * @throws IOException Can be thrown by I/O operations
      */
     public void WriteToFile() throws IOException {
-        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("Assets/Data/KeyStore.bin"));
+        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(this.dataFile));
         oos.writeObject(data);
+        oos.flush();
+        oos.close();
     }
 
     /**
@@ -73,6 +100,30 @@ public class KeyStore {
 
         // Make the changes to the hash map
         this.data.put(pair.hashCode(), pair);
+
+        // Try to write the changes to the data file, or revert to the original state
+        try {
+            this.WriteToFile();
+            return Result.SUCCESS;
+
+        } catch (IOException e) {
+            this.data = (HashMap<Integer, KeyPair>) oldData;
+            return Result.FAILED;
+        }
+    }
+
+    /**
+     * Add a new key pair, using a given id
+     * @param id The id of the key pair
+     * @param pair The KeyPair to add
+     * @return The result code
+     */
+    public Result AddKeyPair(int id, KeyPair pair) {
+        // Create a copy of the original data
+        Object oldData = this.data.clone();
+
+        // Make the changes to the hash map
+        this.data.put(id, pair);
 
         // Try to write the changes to the data file, or revert to the original state
         try {

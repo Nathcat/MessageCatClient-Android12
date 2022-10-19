@@ -22,7 +22,7 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import com.nathcat.RSA.ObjectContainer;
+;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.User;
@@ -112,20 +112,8 @@ public class NewUserActivity extends AppCompatActivity {
      */
     private String randomPassword() {
         Random r = new Random();
-        StringBuilder sb = new StringBuilder();
 
-        // Add a series of random integers to the password string
-        int length = r.nextInt();
-        while (length <= 0) {
-            length = r.nextInt(20);
-        }
-
-        for (int i = 0; i < length; i++) {
-            sb.append(r.nextInt(1000));
-        }
-
-        // Return the final string
-        return sb.toString();
+        return String.valueOf(r.nextInt());
     }
 
     public void onSubmitButtonClicked(View v) {
@@ -138,7 +126,7 @@ public class NewUserActivity extends AppCompatActivity {
 
         JSONObject request = new JSONObject();
         request.put("type", RequestType.AddUser);
-        request.put("data", new ObjectContainer(new User(-1, phoneNumberEntry.getText().toString(), password, displayNameEntry.getText().toString(), new Date().toString(), "default.png")));
+        request.put("data", new User(-1, phoneNumberEntry.getText().toString(), password, displayNameEntry.getText().toString(), new Date().toString(), "default.png"));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -148,6 +136,17 @@ public class NewUserActivity extends AppCompatActivity {
                     onSubmitButtonClicked(v);
                 }
 
+                // Check if the response is null
+                // If this is the case then the entry had duplicate data
+                if (response == null) {
+                    NewUserActivity.this.runOnUiThread(() -> {
+                        Toast.makeText(NewUserActivity.this, "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show();
+                        loadingWheel.setVisibility(View.GONE);
+                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    });
+                    return;
+                }
+
                 // Write the data to the auth file
                 try {
                     ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
@@ -155,6 +154,7 @@ public class NewUserActivity extends AppCompatActivity {
                     oos.flush();
                     oos.close();
 
+                    // TODO Remove test chats
                     oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
                     oos.writeObject(new Chat[] {new Chat(-1, "test1", "test1-desc", -1), new Chat(-1, "test2", "test2-desc", -1)});
                     oos.flush();
@@ -163,23 +163,38 @@ public class NewUserActivity extends AppCompatActivity {
                     // Now start an authentication request and start up the loading screen
                     JSONObject authRequest = new JSONObject();
                     authRequest.put("type", RequestType.Authenticate);
-                    authRequest.put("data", new ObjectContainer(response));
+                    authRequest.put("data", response);
 
                     // Send the auth request and start the loading activity
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {}, authRequest));
-
-                    ((Activity) NewUserActivity.this).runOnUiThread(new Runnable() {
+                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                         @Override
-                        public void run() {
-                            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                        public void callback(Result result, Object response) {
+                            if (result == Result.FAILED) {
+                                networkerService.authenticated = false;
+                            }
+                            else {
+                                if (response.getClass() == String.class) {
+                                    networkerService.authenticated = false;
+                                }
+                                else {
+                                    networkerService.authenticated = true;
+
+                                }
+                            }
+
+                            networkerService.waitingForResponse = false;
                         }
-                    });
+                    }, authRequest));
+
+                    NewUserActivity.this.runOnUiThread(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE));
 
                     startActivity(new Intent(NewUserActivity.this, LoadingActivity.class));
 
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
+                networkerService.waitingForResponse = false;
             }
         }, request));
     }
