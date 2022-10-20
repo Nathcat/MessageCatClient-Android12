@@ -154,12 +154,6 @@ public class NewUserActivity extends AppCompatActivity {
                     oos.flush();
                     oos.close();
 
-                    // TODO Remove test chats
-                    oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
-                    oos.writeObject(new Chat[] {new Chat(-1, "test1", "test1-desc", -1), new Chat(-1, "test2", "test2-desc", -1)});
-                    oos.flush();
-                    oos.close();
-
                     // Now start an authentication request and start up the loading screen
                     JSONObject authRequest = new JSONObject();
                     authRequest.put("type", RequestType.Authenticate);

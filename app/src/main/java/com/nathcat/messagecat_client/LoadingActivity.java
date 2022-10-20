@@ -19,6 +19,10 @@ public class LoadingActivity extends AppCompatActivity {
     private class WaitForAuthThread extends Thread {
         @Override
         public void run() {
+            if (networkerService.authenticated) {
+                startActivity(new Intent(LoadingActivity.this, MainActivity.class));
+            }
+
             while (networkerService.waitingForResponse) {
                 try {
                     Thread.sleep(100);
