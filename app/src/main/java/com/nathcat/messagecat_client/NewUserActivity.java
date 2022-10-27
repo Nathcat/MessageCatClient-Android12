@@ -164,16 +164,36 @@ public class NewUserActivity extends AppCompatActivity {
                         @Override
                         public void callback(Result result, Object response) {
                             if (result == Result.FAILED) {
-                                networkerService.authenticated = false;
+                                System.exit(1);
                             }
-                            else {
-                                if (response.getClass() == String.class) {
-                                    networkerService.authenticated = false;
-                                }
-                                else {
-                                    networkerService.authenticated = true;
 
+                            if (response.getClass() == String.class) {
+                                networkerService.authenticated = false;
+                                networkerService.waitingForResponse = false;
+                                System.exit(1);
+                            }
+
+                            // If authentication was successful...
+                            if (result == Result.SUCCESS) {
+                                networkerService.authenticated = true;
+
+                                // Update the data in the auth file
+                                try {
+                                    ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
+                                    oos.writeObject(response);
+                                    oos.flush();
+                                    oos.close();
+
+                                    networkerService.user = (User) response;
+
+                                } catch (IOException e) {
+                                    e.printStackTrace();
                                 }
+
+                            /* TODO Notifier routine should be done through listen rule handler now
+                            NotifierRoutine notifierRoutine = new NotifierRoutine();
+                            notifierRoutine.setDaemon(true);
+                            notifierRoutine.start();*/
                             }
 
                             networkerService.waitingForResponse = false;
@@ -187,8 +207,6 @@ public class NewUserActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-
-                networkerService.waitingForResponse = false;
             }
         }, request));
     }
