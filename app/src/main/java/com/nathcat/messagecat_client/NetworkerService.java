@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
@@ -25,6 +26,7 @@ import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.User;
+import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
 import com.nathcat.messagecat_database.Result;
 
@@ -56,7 +58,7 @@ public class NetworkerService extends Service implements Serializable {
             this.channelDescription = channelDescription;
 
             // Create the notification channel with default importance
-            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+            int importance = NotificationManager.IMPORTANCE_HIGH;
             android.app.NotificationChannel channel = new android.app.NotificationChannel(this.channelName, this.channelName, importance);
             channel.setDescription(this.channelDescription);
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
@@ -71,10 +73,11 @@ public class NetworkerService extends Service implements Serializable {
          */
         public void showNotification(String title, String message) {
             NotificationCompat.Builder builder = new NotificationCompat.Builder(NetworkerService.this, this.channelName)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)  // TODO Change this to app logo
+                    .setSmallIcon(R.drawable.cat_notification)
                     .setContentTitle(title)
                     .setContentText(message)
-                    .setPriority(NotificationManagerCompat.IMPORTANCE_HIGH);
+                    .setPriority(Notification.PRIORITY_MAX)
+                    .setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
 
             NotificationManagerCompat manager = NotificationManagerCompat.from(NetworkerService.this);
             manager.notify(0, builder.build());
@@ -87,10 +90,18 @@ public class NetworkerService extends Service implements Serializable {
     public static class Request {
         public final IRequestCallback callback;  // The callback to be performed when a response is received
         public final Object request;             // The request object
+        public final Bundle bundle;              // External data that may be needed in the callback
 
         public Request(IRequestCallback callback, Object request) {
             this.callback = callback;
             this.request = request;
+            this.bundle = null;
+        }
+
+        public Request(IRequestCallback callback, Object request, Bundle bundle) {
+            this.callback = callback;
+            this.request = request;
+            this.bundle = bundle;
         }
     }
 
@@ -112,6 +123,11 @@ public class NetworkerService extends Service implements Serializable {
             super(callback, request);
             this.lrCallback = lrCallback;
         }
+
+        public ListenRuleRequest(IListenRuleCallback lrCallback, IRequestCallback callback, Object request, Bundle bundle) {
+            super(callback, request, bundle);
+            this.lrCallback = lrCallback;
+        }
     }
 
     /**
@@ -119,6 +135,7 @@ public class NetworkerService extends Service implements Serializable {
      */
     public interface IListenRuleCallback {
         default void callback(Object response) {}
+        default void callback(Object response, Bundle bundle) {}
     }
 
     /**
@@ -315,12 +332,12 @@ public class NetworkerService extends Service implements Serializable {
     public NotificationChannel notificationChannel;  // The notification channel to be used to send notifications
     private ConnectionHandler connectionHandler;     // The active connection handler
     private Looper connectionHandlerLooper;          // The Handler looper attached to the active connection handler
-    private Looper listenRuleHandlerLooper;          // The Handler looper attached to the connection managing listening rules
     public boolean authenticated = false;            // Is the client currently authenticated
     public boolean waitingForResponse = false;       // Is the client currently waiting for a response
     private final NetworkerServiceBinder binder = new NetworkerServiceBinder();
     private boolean bound = false;                   // Is the service currently bound to the UI thread
     public User user = null;                         // The user that is currently authenticated
+    public int activeChatID = -1;                    // The id of the chat that is currently being viewed, or -1 if none are being viewed
 
     /**
      * Returns a binder
@@ -357,10 +374,10 @@ public class NetworkerService extends Service implements Serializable {
         );
 
         startForeground(1, new Notification.Builder(this, notificationChannel.channelName)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.cat_notification)
                 .setContentTitle("MessageCat")
                 .setContentText("MessageCat service is running")
-                .setPriority(Notification.PRIORITY_HIGH)
+                .setPriority(Notification.PRIORITY_LOW)
                 .build());
 
         startConnectionHandler();
@@ -455,10 +472,111 @@ public class NetworkerService extends Service implements Serializable {
                                 e.printStackTrace();
                             }
 
-                            /* TODO Notifier routine should be done through listen rule handler now
-                            NotifierRoutine notifierRoutine = new NotifierRoutine();
-                            notifierRoutine.setDaemon(true);
-                            notifierRoutine.start();*/
+                            // Add the notification listen rules
+                            JSONObject friendRequestRuleRequest = new JSONObject();
+                            friendRequestRuleRequest.put("type", RequestType.AddListenRule);
+                            friendRequestRuleRequest.put("data", new ListenRule(RequestType.SendFriendRequest, "RecipientID", user.UserID));
+                            SendRequest(new ListenRuleRequest(new IListenRuleCallback() {
+                                @Override
+                                public void callback(Object response) {
+                                    // Get the friend request from the response object
+                                    FriendRequest friendRequest = (FriendRequest) ((JSONObject) response).get("data");
+
+                                    // Request the user that sent the request from the server
+                                    JSONObject senderRequest = new JSONObject();
+                                    senderRequest.put("type", RequestType.GetUser);
+                                    senderRequest.put("selector", "id");
+                                    senderRequest.put("data", new User(friendRequest.SenderID, null, null, null, null, null));
+                                    SendRequest(new Request(new IRequestCallback() {
+                                        @Override
+                                        public void callback(Result result, Object response) {
+                                            if (result == Result.FAILED) {
+                                                return;
+                                            }
+
+                                            // Cast the response into a user object
+                                            User sender = (User) response;
+                                            // Show the notification
+                                            notificationChannel.showNotification("New friend request", sender.DisplayName + " wants to be friends!");
+                                        }
+                                    }, senderRequest));
+                                }
+                            }, new IRequestCallback() {
+                                @Override
+                                public void callback(Result result, Object response) {
+                                    IRequestCallback.super.callback(result, response);
+                                }
+                            }, friendRequestRuleRequest));
+
+                            JSONObject chatRequestRuleRequest = new JSONObject();
+                            chatRequestRuleRequest.put("type", RequestType.AddListenRule);
+                            chatRequestRuleRequest.put("data", new ListenRule(RequestType.SendChatInvite, "RecipientID", user.UserID));
+                            SendRequest(new ListenRuleRequest(new IListenRuleCallback() {
+                                @Override
+                                public void callback(Object response) {
+                                    // Get the chat invite from the request that triggered the listen rule
+                                    ChatInvite chatInvite = (ChatInvite) ((JSONObject) response).get("data");
+
+                                    // Create a new request to get the chat that the user has been invited to
+                                    JSONObject getChatRequest = new JSONObject();
+                                    getChatRequest.put("type", RequestType.GetChat);
+                                    getChatRequest.put("data", new Chat(chatInvite.ChatID, null, null, -1));
+
+                                    SendRequest(new Request(new IRequestCallback() {
+                                        @Override
+                                        public void callback(Result result, Object response) {
+                                            if (result == Result.FAILED) {
+                                                return;
+                                            }
+
+                                            // Cast the response to a Chat object
+                                            Chat chat = (Chat) response;
+                                            // Show the notification
+                                            notificationChannel.showNotification("New chat invitation", "You have been invited to " + chat.Name);
+                                        }
+                                    }, getChatRequest));
+                                }
+                            }, new IRequestCallback() {
+                                @Override
+                                public void callback(Result result, Object response) {
+                                    IRequestCallback.super.callback(result, response);
+                                }
+                            }, chatRequestRuleRequest));
+
+                            File chatsFile = new File(getFilesDir(), "Chats.bin");
+                            if (chatsFile.exists()) {
+                                try {
+                                    // Get the array of chats
+                                    ObjectInputStream ois = new ObjectInputStream(new FileInputStream(chatsFile));
+                                    Chat[] chats = (Chat[]) ois.readObject();
+
+                                    // Create a listen rule for each of the chats
+                                    for (Chat chat : chats) {
+                                        JSONObject msgRule = new JSONObject();
+                                        msgRule.put("type", RequestType.AddListenRule);
+                                        msgRule.put("data", new ListenRule(RequestType.SendMessage, "ChatID", chat.ChatID));
+                                        Bundle bundle = new Bundle();
+                                        bundle.putSerializable("chat", chat);
+
+                                        SendRequest(new ListenRuleRequest(new IListenRuleCallback() {
+                                            @Override
+                                            public void callback(Object response, Bundle bundle) {
+                                                // Create a notification
+                                                notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
+                                            }
+                                        }, new IRequestCallback() {
+                                            @Override
+                                            public void callback(Result result, Object response) {
+                                                IRequestCallback.super.callback(result, response);
+                                            }
+                                        }, msgRule, bundle));
+                                    }
+
+                                } catch (IOException | ClassNotFoundException e) {
+                                    e.printStackTrace();
+                                }
+
+                            }
                         }
 
                         waitingForResponse = false;

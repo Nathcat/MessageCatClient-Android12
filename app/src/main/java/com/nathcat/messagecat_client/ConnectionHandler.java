@@ -1,6 +1,7 @@
 package com.nathcat.messagecat_client;
 
 import android.content.Context;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -36,10 +37,12 @@ public class ConnectionHandler extends Handler {
     public class ListenRuleRecord {
         public final ListenRule listenRule;
         public final NetworkerService.IListenRuleCallback callback;
+        public final Bundle bundle;
 
-        private ListenRuleRecord(ListenRule listenRule, NetworkerService.IListenRuleCallback callback) {
+        private ListenRuleRecord(ListenRule listenRule, NetworkerService.IListenRuleCallback callback, Bundle bundle) {
             this.listenRule = listenRule;
             this.callback = callback;
+            this.bundle = bundle;
         }
     }
 
@@ -96,11 +99,14 @@ public class ConnectionHandler extends Handler {
 
                 this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
 
-                callbackHandler = new ListenRuleCallbackHandler(this);
+                callbackHandler = new ListenRuleCallbackHandler(this, keyPair, serverKeyPair);
                 callbackHandler.setDaemon(true);
                 callbackHandler.start();
 
-            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
+                while (callbackHandler.port == -1) {System.out.println("Waiting for port");}
+                this.Send(this.serverKeyPair.encrypt(callbackHandler.port));
+
+            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException | PublicKeyException e) {
                 e.printStackTrace();
             }
 
@@ -129,7 +135,6 @@ public class ConnectionHandler extends Handler {
 
             try {
                 ListenRule rule = (ListenRule) ((JSONObject) lrRequest.request).get("data");
-                rule.connectionHandlerId = this.callbackHandler.connectionHandlerId;
                 ((JSONObject) lrRequest.request).put("data", rule);
 
                 // Send the request
@@ -137,10 +142,9 @@ public class ConnectionHandler extends Handler {
                 // Receive the ID
                 int id = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
                 rule = (ListenRule) ((JSONObject) lrRequest.request).get("data");
-                rule.connectionHandlerId = this.callbackHandler.connectionHandlerId;
                 rule.setId(id);
                 // Add the listen rule to the array along with it's callback
-                this.listenRules.add(new ListenRuleRecord(rule, lrRequest.lrCallback));
+                this.listenRules.add(new ListenRuleRecord(rule, lrRequest.lrCallback, lrRequest.bundle));
                 lrRequest.callback.callback(Result.SUCCESS, id);
 
             } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException | ListenRule.IDAlreadySetException e) {
@@ -161,9 +165,9 @@ public class ConnectionHandler extends Handler {
                 }
                 // Send the request
                 this.Send(this.serverKeyPair.encrypt(lrRequest.request));
-                lrRequest.callback.callback(Result.SUCCESS, null);
+                lrRequest.callback.callback(Result.SUCCESS, this.keyPair.decrypt((EncryptedObject) this.Receive()));
 
-            } catch (IOException | PublicKeyException e) {
+            } catch (IOException | PublicKeyException | ClassNotFoundException | PrivateKeyException e) {
                 e.printStackTrace();
                 lrRequest.callback.callback(Result.FAILED, null);
             }

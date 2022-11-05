@@ -142,6 +142,8 @@ public class MessagingFragment extends Fragment {
 
         assert privateKey != null;
 
+        ((MainActivity) requireActivity()).networkerService.activeChatID = this.chat.ChatID;
+
         // Create the users hashmap and put the current user in it
         ((MainActivity) requireActivity()).users = new HashMap<>();
         ((MainActivity) requireActivity()).users.put(networkerService.user.UserID, networkerService.user);
@@ -163,12 +165,20 @@ public class MessagingFragment extends Fragment {
                 }
 
                 // Assign the message queue to the field
+                System.out.println(response);
                 messageQueue = (MessageQueue) response;
 
                 // Call the update message box function on the UI thread
                 // Passing the instance of the fragment class as a parameter
-                requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
+                try {
+                    requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
+                    // Hide the loading wheel
+                    requireActivity().runOnUiThread(() -> requireView().findViewById(R.id.messagingLoadingWheel).setVisibility(View.GONE));
 
+                } catch (IllegalStateException e) {
+                    System.out.println("Message window was closed!");
+                    return;
+                }
                 networkerService.waitingForResponse = false;
             }
         }, request));
@@ -217,6 +227,8 @@ public class MessagingFragment extends Fragment {
                 NetworkerService.IRequestCallback.super.callback(result, response);
             }
         }, request));
+
+        ((MainActivity) requireActivity()).networkerService.activeChatID = -1;
     }
 
     /**

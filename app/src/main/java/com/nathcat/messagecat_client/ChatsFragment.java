@@ -59,13 +59,14 @@ public class ChatsFragment extends Fragment {
             return;
         }
 
-        // If there is chats to display, hide the no chats message
+        // If there are chats to display, hide the no chats message
         if (chats.length != 0) {
             requireView().findViewById(R.id.noChatsMessage).setVisibility(View.GONE);
         }
 
         // Get the linear layout widget
         LinearLayout chatsContainer = requireView().findViewById(R.id.ChatsContainer);
+        chatsContainer.removeAllViews();
 
         for (Chat chat : chats) {
             // Get a random id for the new fragment container
