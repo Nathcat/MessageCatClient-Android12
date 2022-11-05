@@ -11,6 +11,7 @@ import org.json.simple.JSONObject;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
 
@@ -26,10 +27,12 @@ public class ListenRuleCallbackHandler extends Thread {
     public ObjectInputStream ois = null;          // Object input stream
     public KeyPair keyPair = null;                // The client's key pair
     public KeyPair serverKeyPair = null;          // The server's key pair
-    public int connectionHandlerId = -1;
+    public int port = -1;
 
-    public ListenRuleCallbackHandler(ConnectionHandler connectionHandler) {
+    public ListenRuleCallbackHandler(ConnectionHandler connectionHandler, KeyPair keyPair, KeyPair serverKeyPair) {
         this.connectionHandler = connectionHandler;
+        this.keyPair = keyPair;
+        this.serverKeyPair = serverKeyPair;
     }
 
     /**
@@ -55,20 +58,14 @@ public class ListenRuleCallbackHandler extends Thread {
     @Override
     public void run() {
         try {
-            // Try to connect to the server
-            this.s = new Socket("192.168.1.26", 1234);
+            ServerSocket ss = new ServerSocket(0);
+            this.port = ss.getLocalPort();
+            this.s = ss.accept();
+            ss.close();
             this.oos = new ObjectOutputStream(s.getOutputStream());
             this.ois = new ObjectInputStream(s.getInputStream());
 
-            // Create a key pair and perform the handshake
-            this.keyPair = RSA.GenerateRSAKeyPair();
-            this.serverKeyPair = (KeyPair) this.Receive();
-
-            this.Send(new KeyPair(this.keyPair.pub, null));
-
-            this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
-
-        } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -78,12 +75,17 @@ public class ListenRuleCallbackHandler extends Thread {
             try {
                 // Receive the trigger request
                 JSONObject triggerRequest = (JSONObject) this.keyPair.decrypt((EncryptedObject) this.Receive());
-                System.out.println("Triggered listen rule with response: " + triggerRequest);
+
                 // Check all of the listen rules in the array list for a rule with a matching id
                 for (int i = 0; i < this.connectionHandler.listenRules.size(); i++) {
                     // If the id matches, perform the callback
                     if (this.connectionHandler.listenRules.get(i).listenRule.getId() == (int) triggerRequest.get("triggerID")) {
-                        this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest);
+                        if (this.connectionHandler.listenRules.get(i).bundle == null) {
+                            this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest);
+                        }
+                        else {
+                            this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest, this.connectionHandler.listenRules.get(i).bundle);
+                        }
                     }
                 }
             } catch (PrivateKeyException | IOException | ClassNotFoundException e) {

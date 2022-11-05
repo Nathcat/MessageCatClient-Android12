@@ -25,15 +25,20 @@ import android.widget.Toast;
 ;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
+import com.nathcat.messagecat_database_entities.ChatInvite;
+import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.User;
+import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.Date;
 import java.util.Random;
@@ -154,6 +159,11 @@ public class NewUserActivity extends AppCompatActivity {
                     oos.flush();
                     oos.close();
 
+                    oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
+                    oos.writeObject(new Chat[0]);
+                    oos.flush();
+                    oos.close();
+
                     // Now start an authentication request and start up the loading screen
                     JSONObject authRequest = new JSONObject();
                     authRequest.put("type", RequestType.Authenticate);
@@ -190,10 +200,110 @@ public class NewUserActivity extends AppCompatActivity {
                                     e.printStackTrace();
                                 }
 
-                            /* TODO Notifier routine should be done through listen rule handler now
-                            NotifierRoutine notifierRoutine = new NotifierRoutine();
-                            notifierRoutine.setDaemon(true);
-                            notifierRoutine.start();*/
+                                // Add the notification listen rules
+                                JSONObject friendRequestRuleRequest = new JSONObject();
+                                friendRequestRuleRequest.put("type", RequestType.AddListenRule);
+                                friendRequestRuleRequest.put("data", new ListenRule(RequestType.SendFriendRequest, "RecipientID", networkerService.user.UserID));
+                                networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+                                    @Override
+                                    public void callback(Object response) {
+                                        // Get the friend request from the response object
+                                        FriendRequest friendRequest = (FriendRequest) ((JSONObject) response).get("data");
+
+                                        // Request the user that sent the request from the server
+                                        JSONObject senderRequest = new JSONObject();
+                                        senderRequest.put("type", RequestType.GetUser);
+                                        senderRequest.put("data", new User(friendRequest.SenderID, null, null, null, null, null));
+                                        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                                            @Override
+                                            public void callback(Result result, Object response) {
+                                                if (result == Result.FAILED) {
+                                                    return;
+                                                }
+
+                                                // Cast the response into a user object
+                                                User sender = (User) response;
+                                                // Show the notification
+                                                networkerService.notificationChannel.showNotification("New friend request", sender.DisplayName + " wants to be friends!");
+                                            }
+                                        }, senderRequest));
+                                    }
+                                }, new NetworkerService.IRequestCallback() {
+                                    @Override
+                                    public void callback(Result result, Object response) {
+                                        NetworkerService.IRequestCallback.super.callback(result, response);
+                                    }
+                                }, friendRequestRuleRequest));
+
+                                JSONObject chatRequestRuleRequest = new JSONObject();
+                                chatRequestRuleRequest.put("type", RequestType.AddListenRule);
+                                chatRequestRuleRequest.put("data", new ListenRule(RequestType.SendChatInvite, "RecipientID", networkerService.user.UserID));
+                                networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+                                    @Override
+                                    public void callback(Object response) {
+                                        // Get the chat invite from the request that triggered the listen rule
+                                        ChatInvite chatInvite = (ChatInvite) ((JSONObject) response).get("data");
+
+                                        // Create a new request to get the chat that the user has been invited to
+                                        JSONObject getChatRequest = new JSONObject();
+                                        getChatRequest.put("type", RequestType.GetChat);
+                                        getChatRequest.put("data", new Chat(chatInvite.ChatID, null, null, -1));
+
+                                        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                                            @Override
+                                            public void callback(Result result, Object response) {
+                                                if (result == Result.FAILED) {
+                                                    return;
+                                                }
+
+                                                // Cast the response to a Chat object
+                                                Chat chat = (Chat) response;
+                                                // Show the notification
+                                                networkerService.notificationChannel.showNotification("New chat invitation", "You have been invited to " + chat.Name);
+                                            }
+                                        }, getChatRequest));
+                                    }
+                                }, new NetworkerService.IRequestCallback() {
+                                    @Override
+                                    public void callback(Result result, Object response) {
+                                        NetworkerService.IRequestCallback.super.callback(result, response);
+                                    }
+                                }, chatRequestRuleRequest));
+
+                                File chatsFile = new File(getFilesDir(), "Chats.bin");
+                                if (chatsFile.exists()) {
+                                    try {
+                                        // Get the array of chats
+                                        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(chatsFile));
+                                        Chat[] chats = (Chat[]) ois.readObject();
+
+                                        // Create a listen rule for each of the chats
+                                        for (Chat chat : chats) {
+                                            JSONObject msgRule = new JSONObject();
+                                            msgRule.put("type", RequestType.AddListenRule);
+                                            msgRule.put("data", new ListenRule(RequestType.SendMessage, "ChatID", chat.ChatID));
+                                            Bundle bundle = new Bundle();
+                                            bundle.putSerializable("chat", chat);
+
+                                            networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+                                                @Override
+                                                public void callback(Object response, Bundle bundle) {
+                                                    // Create a notification
+                                                    networkerService.notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
+                                                }
+                                            }, new NetworkerService.IRequestCallback() {
+                                                @Override
+                                                public void callback(Result result, Object response) {
+                                                    NetworkerService.IRequestCallback.super.callback(result, response);
+                                                }
+                                            }, msgRule, bundle));
+                                        }
+
+                                    } catch (IOException | ClassNotFoundException e) {
+                                        e.printStackTrace();
+                                    }
+
+                                }
                             }
 
                             networkerService.waitingForResponse = false;
