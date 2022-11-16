@@ -99,7 +99,6 @@ public class MessagingFragment extends Fragment {
     private KeyPair privateKey;
     private NetworkerService networkerService;
     private MessageQueue messageQueue;
-    private long newestMessageTimeSent = 0;
     private int listenRuleId = -1;
 
     public MessagingFragment() {
@@ -246,13 +245,6 @@ public class MessagingFragment extends Fragment {
                 continue;
             }
 
-            if (message.TimeSent > fragment.newestMessageTimeSent) {
-                fragment.newestMessageTimeSent = message.TimeSent;
-            }
-            else {
-                continue;
-            }
-
             // If the user that sent the message is not currently in the hashmap, request the user from the server and add them
             // Then we can add the message
             if (((MainActivity) fragment.requireActivity()).users.get(message.SenderID) == null) {
@@ -269,6 +261,7 @@ public class MessagingFragment extends Fragment {
                         // Decrypt the message before passing it to the fragment
                         String content = null;
                         try {
+                            System.out.println("Message content: " + message.Content);
                             content = (String) privateKey.decrypt((EncryptedObject) message.Content);
 
                         } catch (PrivateKeyException e) {
