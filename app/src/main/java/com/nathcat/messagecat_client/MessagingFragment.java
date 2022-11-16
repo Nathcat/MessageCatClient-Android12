@@ -35,66 +35,6 @@ import java.util.HashMap;
 
 public class MessagingFragment extends Fragment {
 
-    /**
-     * Used to continuously update the message box
-     * @deprecated
-     */
-    private class MessageBoxUpdaterThread extends Thread {
-        public boolean allowRun = true;
-        private KeyPair privateKey;
-
-        public MessageBoxUpdaterThread() throws IOException {
-            super();
-
-            KeyStore keyStore = new KeyStore(new File(requireActivity().getFilesDir(), "KeyStore.bin"));
-            privateKey = keyStore.GetKeyPair(MessagingFragment.this.chat.PublicKeyID);
-        }
-
-        public void run() {
-            System.out.println("Thread started");
-
-            while (allowRun) {
-                try {
-                    // Check if the networker service is already waiting for a response
-                    if (networkerService.waitingForResponse) {
-                        Thread.sleep(100);
-                        continue;
-                    }
-
-                    // Create a request to get the message queue for this chat
-                    JSONObject request = new JSONObject();
-                    request.put("type", RequestType.GetMessageQueue);
-                    request.put("data", chat.ChatID);
-
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            // Check if the request failed
-                            if (result == Result.FAILED || response == null) {
-                                requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                                return;
-                            }
-
-                            // Assign the message queue to the field
-                            messageQueue = (MessageQueue) response;
-
-                            // Call the update message box function on the UI thread
-                            // Passing the instance of the fragment class as a parameter
-                            requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, request));
-
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            System.out.println("Thread stopped");
-        }
-    }
-
     public Chat chat;
     private KeyPair privateKey;
     private NetworkerService networkerService;
@@ -261,7 +201,6 @@ public class MessagingFragment extends Fragment {
                         // Decrypt the message before passing it to the fragment
                         String content = null;
                         try {
-                            System.out.println("Message content: " + message.Content);
                             content = (String) privateKey.decrypt((EncryptedObject) message.Content);
 
                         } catch (PrivateKeyException e) {
