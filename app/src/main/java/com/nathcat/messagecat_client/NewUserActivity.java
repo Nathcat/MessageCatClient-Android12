@@ -40,6 +40,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.Random;
 
@@ -64,10 +67,15 @@ public class NewUserActivity extends AppCompatActivity {
     private ProgressBar loadingWheel;
 
     private String phoneNumber;
-    private String password;
+    private EditText passwordEntry;
+    private EditText passwordRetypeEntry;
 
+    private final MessageDigest digest = MessageDigest.getInstance("SHA-256");
     private NetworkerService networkerService;
     private boolean bound = false;
+
+    public NewUserActivity() throws NoSuchAlgorithmException {
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,22 +114,30 @@ public class NewUserActivity extends AppCompatActivity {
 
         assert phoneNumber != null;
 
-        password = randomPassword();
+        passwordEntry = (EditText) findViewById(R.id.password);
+        passwordRetypeEntry = (EditText) findViewById(R.id.passwordRetype);
 
         phoneNumberEntry.setText(phoneNumber);
     }
 
-    /**
-     * Generates a random password
-     * @return Random password
-     */
-    private String randomPassword() {
-        Random r = new Random();
-
-        return String.valueOf(r.nextInt());
-    }
-
     public void onSubmitButtonClicked(View v) {
+        // Check if any of the fields are empty, and check that the password entries match
+        if (phoneNumberEntry.getText().toString().contentEquals("") || passwordEntry.getText().toString().contentEquals("") || passwordRetypeEntry.getText().toString().contentEquals("") || displayNameEntry.getText().toString().contentEquals("")) {
+            Toast.makeText(this, "One or more of the entry fields are empty!", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        if (!passwordEntry.getText().toString().contentEquals(passwordRetypeEntry.getText().toString())) {
+            Toast.makeText(this, "Passwords do not match!", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // Hash the password
+        String hashedPassword = bytesToHex(digest.digest(
+                passwordEntry.getText().toString().getBytes(StandardCharsets.UTF_8)
+        ));
+
+
         // Block user interaction
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
@@ -131,7 +147,7 @@ public class NewUserActivity extends AppCompatActivity {
 
         JSONObject request = new JSONObject();
         request.put("type", RequestType.AddUser);
-        request.put("data", new User(-1, phoneNumberEntry.getText().toString(), password, displayNameEntry.getText().toString(), new Date().toString(), "default.png"));
+        request.put("data", new User(-1, phoneNumberEntry.getText().toString(), hashedPassword, displayNameEntry.getText().toString(), new Date().toString(), "default.png"));
 
         networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
             @Override
@@ -319,5 +335,24 @@ public class NewUserActivity extends AppCompatActivity {
                 }
             }
         }, request));
+    }
+
+    /**
+     * Converts a byte array to a hex string. Used for hashing passwords.
+     * @param bytes The byte array to convert.
+     * @return A hex string
+     */
+    public String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(2 * bytes.length);  // Twice the length since we have two hex characters per byte
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hex = "0" + hex;
+            }
+
+            sb.append(hex);
+        }
+
+        return sb.toString();
     }
 }
