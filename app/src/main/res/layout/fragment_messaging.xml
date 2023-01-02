@@ -15,17 +15,30 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <LinearLayout
-        android:id="@+id/MessageBox"
+    <ScrollView
+        android:id="@+id/MessageBoxScrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:orientation="vertical"
+        android:contentDescription="@string/MessageBoxContentDescription"
         app:layout_constraintBottom_toTopOf="@id/ComposeBox"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-    </LinearLayout>
+        <LinearLayout
+            android:id="@+id/MessageBox"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toTopOf="@id/ComposeBox"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+
+        </LinearLayout>
+
+    </ScrollView>
 
     <View
         android:id="@+id/divider"
@@ -35,7 +48,7 @@
         app:layout_constraintBottom_toTopOf="@id/ComposeBox"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/MessageBox" />
+        app:layout_constraintTop_toBottomOf="@+id/MessageBoxScrollView" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/ComposeBox"
@@ -44,7 +57,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/MessageBox">
+        app:layout_constraintTop_toBottomOf="@+id/MessageBoxScrollView">
 
         <EditText
             android:id="@+id/MessageEntry"
@@ -71,5 +84,18 @@
             app:layout_constraintHorizontal_bias="0.95"
             app:layout_constraintStart_toEndOf="@id/MessageEntry"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <ProgressBar
+            android:id="@+id/messageSendButtonLoadingWheel"
+            style="?android:attr/progressBarStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="@+id/SendButton"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="@+id/SendButton"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintVertical_bias="0.0" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

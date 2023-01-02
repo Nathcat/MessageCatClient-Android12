@@ -53,12 +53,11 @@ public class NetworkerService extends Service implements Serializable {
         private final String channelName;         // Name of the notification channel
         private final String channelDescription;  // Description of the notification channel
 
-        public NotificationChannel(String channelName, String channelDescription) {
+        public NotificationChannel(String channelName, String channelDescription, int importance) {
             this.channelName = channelName;
             this.channelDescription = channelDescription;
 
-            // Create the notification channel with default importance
-            int importance = NotificationManager.IMPORTANCE_HIGH;
+            // Create the notification channel
             android.app.NotificationChannel channel = new android.app.NotificationChannel(this.channelName, this.channelName, importance);
             channel.setDescription(this.channelDescription);
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
@@ -151,15 +150,16 @@ public class NetworkerService extends Service implements Serializable {
         }
     }
 
-    public NotificationChannel notificationChannel;  // The notification channel to be used to send notifications
-    private ConnectionHandler connectionHandler;     // The active connection handler
-    private Looper connectionHandlerLooper;          // The Handler looper attached to the active connection handler
-    public boolean authenticated = false;            // Is the client currently authenticated
-    public boolean waitingForResponse = false;       // Is the client currently waiting for a response
+    public NotificationChannel notificationChannel;   // The notification channel to be used to send notifications
+    public NotificationChannel serviceStatusChannel;  // The notification channel used to show service notifications
+    private ConnectionHandler connectionHandler;      // The active connection handler
+    private Looper connectionHandlerLooper;           // The Handler looper attached to the active connection handler
+    public boolean authenticated = false;             // Is the client currently authenticated
+    public boolean waitingForResponse = false;        // Is the client currently waiting for a response
     private final NetworkerServiceBinder binder = new NetworkerServiceBinder();
-    private boolean bound = false;                   // Is the service currently bound to the UI thread
-    public User user = null;                         // The user that is currently authenticated
-    public int activeChatID = -1;                    // The id of the chat that is currently being viewed, or -1 if none are being viewed
+    private boolean bound = false;                    // Is the service currently bound to the UI thread
+    public User user = null;                          // The user that is currently authenticated
+    public int activeChatID = -1;                     // The id of the chat that is currently being viewed, or -1 if none are being viewed
 
     /**
      * Returns a binder
@@ -191,11 +191,18 @@ public class NetworkerService extends Service implements Serializable {
     public void onCreate() {
         // Create the notification channel
         notificationChannel = new NotificationChannel(
-                "MessageCatNotificationChannel",
-                "Notification channel used to send notifications to the user about things that happen in the app."
+                "MessageCat",
+                "Notification channel used to send notifications to the user about things that happen in the app.",
+                NotificationManager.IMPORTANCE_HIGH
         );
 
-        startForeground(1, new Notification.Builder(this, notificationChannel.channelName)
+        serviceStatusChannel = new NotificationChannel(
+                "MessageCat Service",
+                "Used to notify the user that the MessageCat service is running",
+                NotificationManager.IMPORTANCE_NONE
+        );
+
+        startForeground(1, new Notification.Builder(this, serviceStatusChannel.channelName)
                 .setSmallIcon(R.drawable.cat_notification)
                 .setContentTitle("MessageCat")
                 .setContentText("MessageCat service is running")
@@ -207,7 +214,7 @@ public class NetworkerService extends Service implements Serializable {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
 
     /**
@@ -232,8 +239,9 @@ public class NetworkerService extends Service implements Serializable {
 
     @Override
     public void onDestroy() {
-        connectionHandler.sendEmptyMessage(2);
         System.out.println("Service destroyed");
+        connectionHandler.sendEmptyMessage(2);
+        super.onDestroy();
     }
 
     public void startConnectionHandler() {
@@ -383,8 +391,10 @@ public class NetworkerService extends Service implements Serializable {
                                         SendRequest(new ListenRuleRequest(new IListenRuleCallback() {
                                             @Override
                                             public void callback(Object response, Bundle bundle) {
-                                                // Create a notification
-                                                notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
+                                                if (activeChatID != ((Chat) bundle.getSerializable("chat")).ChatID) {
+                                                    // Create a notification
+                                                    notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
+                                                }
                                             }
                                         }, new IRequestCallback() {
                                             @Override

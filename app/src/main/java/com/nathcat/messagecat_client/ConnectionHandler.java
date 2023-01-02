@@ -86,7 +86,7 @@ public class ConnectionHandler extends Handler {
         if (msg.what == 0) {
             try {
                 // Try to connect to the server
-                this.s = new Socket("192.168.1.26", 1234);
+                this.s = new Socket("13.40.226.47", 1234);
                 this.s.setSoTimeout(20000);
                 this.oos = new ObjectOutputStream(s.getOutputStream());
                 this.ois = new ObjectInputStream(s.getInputStream());
@@ -98,15 +98,16 @@ public class ConnectionHandler extends Handler {
                 this.Send(new KeyPair(this.keyPair.pub, null));
 
                 this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+                System.out.println("Got handler id: " + connectionHandlerId);
 
-                callbackHandler = new ListenRuleCallbackHandler(this, keyPair, serverKeyPair);
+                int port = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+                System.out.println("Got port: " + port);
+
+                callbackHandler = new ListenRuleCallbackHandler(this, keyPair, serverKeyPair, port);
                 callbackHandler.setDaemon(true);
                 callbackHandler.start();
 
-                while (callbackHandler.port == -1) {System.out.println("Waiting for port");}
-                this.Send(this.serverKeyPair.encrypt(callbackHandler.port));
-
-            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException | PublicKeyException e) {
+            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
                 e.printStackTrace();
             }
 

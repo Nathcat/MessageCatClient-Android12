@@ -38,6 +38,7 @@ import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.Friendship;
 import com.nathcat.messagecat_database_entities.Message;
 import com.nathcat.messagecat_database_entities.User;
+import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
@@ -89,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
     public ArrayList<InvitationFragment> invitationFragments = new ArrayList<>();
 
     // Used on the messaging page
-    public HashMap<Integer, User> users;
+    public HashMap<Integer, User> users = new HashMap<>();
     public MessagingFragment messagingFragment;
 
     // Used on the chats page
@@ -389,6 +390,7 @@ public class MainActivity extends AppCompatActivity {
                 for (Chat chat : chats) {
                     if (chat.ChatID == ((ChatInvite) invite).ChatID) {
                         Toast.makeText(this, "You are already a member of this chat!", Toast.LENGTH_SHORT).show();
+                        return;
                     }
                 }
             } catch (IOException | ClassNotFoundException e) {
@@ -419,6 +421,41 @@ public class MainActivity extends AppCompatActivity {
                     }
                     else {
                         runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
+
+                        if (finalInvite.getClass() == ChatInvite.class) {
+                            JSONObject getChatRequest = new JSONObject();
+                            getChatRequest.put("type", RequestType.GetChat);
+                            getChatRequest.put("data", new Chat(((ChatInvite) finalInvite).ChatID, null, null, -1));
+
+                            networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+                                @Override
+                                public void callback(Result result, Object response) {
+                                    // Add a message listen rule for the new chat
+                                    JSONObject lrRequest = new JSONObject();
+                                    lrRequest.put("type", RequestType.AddListenRule);
+                                    lrRequest.put("data", new ListenRule(RequestType.SendMessage, "ChatID", ((ChatInvite) finalInvite).ChatID));
+
+                                    Bundle bundle = new Bundle();
+                                    bundle.putSerializable("chat", (Chat) response);
+
+                                    networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
+                                        @Override
+                                        public void callback(Object response, Bundle bundle) {
+                                            if (networkerService.activeChatID != ((Chat) bundle.getSerializable("chat")).ChatID) {
+                                                // Create a notification
+                                                networkerService.notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
+                                            }
+                                        }
+
+                                    }, new NetworkerService.IRequestCallback() {
+                                        @Override
+                                        public void callback(Result result, Object response) {
+                                            NetworkerService.IRequestCallback.super.callback(result, response);
+                                        }
+                                    }, lrRequest, bundle));
+                                }
+                            }, getChatRequest));
+                        }
                     }
                     MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
                 }
@@ -535,6 +572,10 @@ public class MainActivity extends AppCompatActivity {
      * @param v The view that called this method
      */
     public void SendMessage(View v) throws IOException {
+        // Hide the send button and show the loading wheel
+        v.setVisibility(View.GONE);
+        ((View) v.getParent()).findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.VISIBLE);
+
         // Get the active chat from the messaging fragment
         Chat chat = messagingFragment.chat;
 
@@ -581,6 +622,12 @@ public class MainActivity extends AppCompatActivity {
                             MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
                             System.exit(1);
                         }
+
+                        runOnUiThread(() -> {
+                            // Hide the loading wheel and show the send button
+                            v.setVisibility(View.VISIBLE);
+                            ((View) v.getParent()).findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.GONE);
+                        });
                     }
                 }, sendRequest));
             }

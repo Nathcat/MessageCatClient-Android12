@@ -154,7 +154,7 @@ public class NewUserActivity extends AppCompatActivity {
             public void callback(Result result, Object response) {
                 if (result == Result.FAILED) {
                     networkerService.startConnectionHandler();
-                    onSubmitButtonClicked(v);
+                    runOnUiThread(() -> onSubmitButtonClicked(v));
                 }
 
                 // Check if the response is null

@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.Toast;
 
 import com.nathcat.RSA.EncryptedObject;
@@ -49,7 +50,7 @@ public class MessagingFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Get the chat argument passed to this fragment, and the netorker service instance from
+        // Get the chat argument passed to this fragment, and the networker service instance from
         // the main activity
         chat = (Chat) requireArguments().getSerializable("chat");
         networkerService = ((MainActivity) requireActivity()).networkerService;
@@ -69,6 +70,9 @@ public class MessagingFragment extends Fragment {
         // Set the title on the action bar
         ((AppCompatActivity) requireActivity()).getSupportActionBar().setTitle(chat.Name);
 
+        // Hide the loading wheel under the send button
+        requireView().findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.GONE);
+
         ((MainActivity) requireActivity()).messagingFragment = this;
 
         try {
@@ -84,7 +88,6 @@ public class MessagingFragment extends Fragment {
         ((MainActivity) requireActivity()).networkerService.activeChatID = this.chat.ChatID;
 
         // Create the users hashmap and put the current user in it
-        ((MainActivity) requireActivity()).users = new HashMap<>();
         ((MainActivity) requireActivity()).users.put(networkerService.user.UserID, networkerService.user);
 
         networkerService.waitingForResponse = false;
@@ -175,11 +178,18 @@ public class MessagingFragment extends Fragment {
      * @param fragment The instance of the current fragment class, this is necessary as this method will mostly be called from a Runnable, which is a static context
      */
     public static void updateMessageBoxStart(MessagingFragment fragment, KeyPair privateKey) {
+        fragment.networkerService.waitingForResponse = false;
+
         // Remove all messages currently in the messagebox
-        //((LinearLayout) fragment.requireView().findViewById(R.id.MessageBox)).removeAllViews();
+        fragment.requireActivity().runOnUiThread(() -> ((LinearLayout) fragment.requireView().findViewById(R.id.MessageBox)).removeAllViews());
+
 
         // Add the new messages
-        for (int i = 49; i >= 0; i--) {
+        for (int i = 0; i < 50; i++) {
+            while (fragment.networkerService.waitingForResponse) {
+                System.out.println("Waiting for response");
+            }
+
             Message message = fragment.messageQueue.Get(i);
             if (message == null) {
                 continue;
@@ -220,6 +230,8 @@ public class MessagingFragment extends Fragment {
                                 .setReorderingAllowed(true)
                                 .add(R.id.MessageBox, MessageFragment.class, bundle)
                                 .commit();
+
+                        fragment.networkerService.waitingForResponse = false;
                     }
                 }, request));
             }
@@ -246,7 +258,8 @@ public class MessagingFragment extends Fragment {
             }
         }
 
-        fragment.networkerService.waitingForResponse = false;
+        // Scroll to the bottom of the scroll view
+        ((ScrollView) fragment.requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN);
     }
 
     /**
@@ -288,6 +301,9 @@ public class MessagingFragment extends Fragment {
                             .setReorderingAllowed(true)
                             .add(R.id.MessageBox, MessageFragment.class, bundle)
                             .commit();
+
+                    // Scroll to the bottom of the scroll view
+                    requireActivity().runOnUiThread(() -> ((ScrollView) requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN));
                 }
             }, request));
         }

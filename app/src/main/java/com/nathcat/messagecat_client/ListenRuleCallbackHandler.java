@@ -27,12 +27,13 @@ public class ListenRuleCallbackHandler extends Thread {
     public ObjectInputStream ois = null;          // Object input stream
     public KeyPair keyPair = null;                // The client's key pair
     public KeyPair serverKeyPair = null;          // The server's key pair
-    public int port = -1;
+    public int port;
 
-    public ListenRuleCallbackHandler(ConnectionHandler connectionHandler, KeyPair keyPair, KeyPair serverKeyPair) {
+    public ListenRuleCallbackHandler(ConnectionHandler connectionHandler, KeyPair keyPair, KeyPair serverKeyPair, int port) {
         this.connectionHandler = connectionHandler;
         this.keyPair = keyPair;
         this.serverKeyPair = serverKeyPair;
+        this.port = port;
     }
 
     /**
@@ -58,10 +59,7 @@ public class ListenRuleCallbackHandler extends Thread {
     @Override
     public void run() {
         try {
-            ServerSocket ss = new ServerSocket(0);
-            this.port = ss.getLocalPort();
-            this.s = ss.accept();
-            ss.close();
+            this.s = new Socket("13.40.226.47", port);
             this.oos = new ObjectOutputStream(s.getOutputStream());
             this.ois = new ObjectInputStream(s.getInputStream());
 

@@ -19,7 +19,7 @@
         <activity
             android:name=".InviteToChatActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
+            android:windowSoftInputMode="adjustNothing"
             />
         <activity
             android:name=".MainActivity"
@@ -30,7 +30,7 @@
         <activity
             android:name=".NewUserActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
+            android:windowSoftInputMode="adjustNothing"
             />
 
         <service android:name=".NetworkerService" />
