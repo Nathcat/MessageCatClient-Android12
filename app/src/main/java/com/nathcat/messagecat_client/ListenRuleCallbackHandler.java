@@ -59,7 +59,7 @@ public class ListenRuleCallbackHandler extends Thread {
     @Override
     public void run() {
         try {
-            this.s = new Socket("13.40.226.47", port);
+            this.s = new Socket(NetworkerService.hostName, port);
             this.oos = new ObjectOutputStream(s.getOutputStream());
             this.ois = new ObjectInputStream(s.getInputStream());
 

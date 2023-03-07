@@ -86,7 +86,7 @@ public class ConnectionHandler extends Handler {
         if (msg.what == 0) {
             try {
                 // Try to connect to the server
-                this.s = new Socket("13.40.226.47", 1234);
+                this.s = new Socket(NetworkerService.hostName, 1234);
                 this.s.setSoTimeout(20000);
                 this.oos = new ObjectOutputStream(s.getOutputStream());
                 this.ois = new ObjectInputStream(s.getInputStream());
