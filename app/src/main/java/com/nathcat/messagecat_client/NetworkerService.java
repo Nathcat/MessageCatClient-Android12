@@ -160,7 +160,7 @@ public class NetworkerService extends Service implements Serializable {
     private boolean bound = false;                    // Is the service currently bound to the UI thread
     public User user = null;                          // The user that is currently authenticated
     public int activeChatID = -1;                     // The id of the chat that is currently being viewed, or -1 if none are being viewed
-    public static final String hostName = "10.203.73.186";
+    public static final String hostName = "192.168.1.26";
 
     /**
      * Returns a binder
