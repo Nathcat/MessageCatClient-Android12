@@ -2,18 +2,14 @@ package com.nathcat.messagecat_client;
 
 import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
-;
 import com.nathcat.RSA.PrivateKeyException;
-import com.nathcat.RSA.RSA;
 
 import org.json.simple.JSONObject;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.ServerSocket;
 import java.net.Socket;
-import java.security.NoSuchAlgorithmException;
 
 /**
  * Handles callbacks from listen rules added to the server
@@ -25,8 +21,8 @@ public class ListenRuleCallbackHandler extends Thread {
     public Socket s = null;                       // The socket used to connect to the server
     public ObjectOutputStream oos = null;         // Object output stream
     public ObjectInputStream ois = null;          // Object input stream
-    public KeyPair keyPair = null;                // The client's key pair
-    public KeyPair serverKeyPair = null;          // The server's key pair
+    public KeyPair keyPair;                // The client's key pair
+    public KeyPair serverKeyPair;          // The server's key pair
     public int port;
 
     public ListenRuleCallbackHandler(ConnectionHandler connectionHandler, KeyPair keyPair, KeyPair serverKeyPair, int port) {

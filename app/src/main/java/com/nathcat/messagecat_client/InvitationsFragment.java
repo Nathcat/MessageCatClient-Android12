@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
-;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
@@ -19,9 +18,6 @@ import com.nathcat.messagecat_database_entities.User;
 import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
-
-import java.util.ArrayList;
-import java.util.Arrays;
 
 public class InvitationsFragment extends Fragment {
 

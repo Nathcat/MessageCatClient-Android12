@@ -13,7 +13,6 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.nathcat.RSA.KeyPair;
-;
 import com.nathcat.RSA.RSA;
 import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.Result;
@@ -25,11 +24,10 @@ import com.nathcat.messagecat_server.RequestType;
 import org.json.simple.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.file.Files;
 import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 
@@ -97,7 +95,7 @@ public class InviteToChatActivity extends AppCompatActivity {
         // Get the chats array from the file
         Chat[] chats = null;
         try {
-            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+            ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
             chats = (Chat[]) ois.readObject();
             ois.close();
 
@@ -202,7 +200,7 @@ public class InviteToChatActivity extends AppCompatActivity {
 
                 try {
                     // Open the chats file and read the current chat array
-                    ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+                    ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                     Chat[] chats = (Chat[]) ois.readObject();
                     ois.close();
 
@@ -212,7 +210,7 @@ public class InviteToChatActivity extends AppCompatActivity {
                     newChats[chats.length] = chat;
 
                     // Write the new array to the chats file
-                    ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
+                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                     oos.writeObject(newChats);
                     oos.flush();
                     oos.close();
@@ -244,14 +242,11 @@ public class InviteToChatActivity extends AppCompatActivity {
                             System.exit(1);
                         }
 
-                        InviteToChatActivity.this.runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                Toast.makeText(InviteToChatActivity.this, "Sent chat invite!", Toast.LENGTH_SHORT).show();
+                        InviteToChatActivity.this.runOnUiThread(() -> {
+                            Toast.makeText(InviteToChatActivity.this, "Sent chat invite!", Toast.LENGTH_SHORT).show();
 
-                                // Go back to the main activity
-                                InviteToChatActivity.this.runOnUiThread(() -> startActivity(new Intent(InviteToChatActivity.this, MainActivity.class)));
-                            }
+                            // Go back to the main activity
+                            InviteToChatActivity.this.runOnUiThread(() -> startActivity(new Intent(InviteToChatActivity.this, MainActivity.class)));
                         });
                     }
                 }, inviteRequest));

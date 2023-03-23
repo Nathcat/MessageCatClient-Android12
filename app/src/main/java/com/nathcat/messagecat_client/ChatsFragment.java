@@ -5,7 +5,6 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentContainerView;
-import androidx.fragment.app.FragmentTransaction;
 
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,9 +14,9 @@ import android.widget.LinearLayout;
 import com.nathcat.messagecat_database_entities.Chat;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.nio.file.Files;
 import java.util.Random;
 
 public class ChatsFragment extends Fragment {
@@ -50,7 +49,7 @@ public class ChatsFragment extends Fragment {
 
         // Get the array of chats from local storage
         try {
-            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(requireActivity().getFilesDir(), "Chats.bin")));
+            ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(requireActivity().getFilesDir(), "Chats.bin").toPath()));
             chats = (Chat[]) ois.readObject();
             ois.close();
 

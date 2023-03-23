@@ -4,22 +4,10 @@ import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentContainerView;
 
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.Toast;
-
-import com.nathcat.messagecat_database.Result;
-import com.nathcat.messagecat_database_entities.User;
-import com.nathcat.messagecat_server.RequestType;
-
-import org.json.simple.JSONObject;
-
-import java.util.Random;
 
 public class FindPeopleFragment extends Fragment {
 

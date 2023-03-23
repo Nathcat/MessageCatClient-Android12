@@ -12,8 +12,6 @@ import android.widget.TextView;
 
 import com.nathcat.messagecat_database_entities.Message;
 
-import org.json.simple.JSONObject;
-
 import java.util.Objects;
 
 public class MessageFragment extends Fragment {

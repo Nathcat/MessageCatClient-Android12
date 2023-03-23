@@ -12,7 +12,6 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.List;
 
 import com.nathcat.RSA.*;
 import com.nathcat.messagecat_database.Result;
@@ -34,7 +33,7 @@ public class ConnectionHandler extends Handler {
     public int connectionHandlerId;        // The identifier of the connection handler this handler has connected to
     public ListenRuleCallbackHandler callbackHandler;
 
-    public class ListenRuleRecord {
+    public static class ListenRuleRecord {
         public final ListenRule listenRule;
         public final NetworkerService.IListenRuleCallback callback;
         public final Bundle bundle;

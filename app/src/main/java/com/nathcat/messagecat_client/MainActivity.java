@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.Menu;
 import android.widget.EditText;
@@ -13,10 +12,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
-import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentContainerView;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -27,7 +24,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
-;
 import com.nathcat.RSA.PublicKeyException;
 import com.nathcat.messagecat_client.databinding.ActivityMainBinding;
 import com.nathcat.messagecat_database.KeyStore;
@@ -35,7 +31,6 @@ import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
-import com.nathcat.messagecat_database_entities.Friendship;
 import com.nathcat.messagecat_database_entities.Message;
 import com.nathcat.messagecat_database_entities.User;
 import com.nathcat.messagecat_server.ListenRule;
@@ -44,13 +39,11 @@ import com.nathcat.messagecat_server.RequestType;
 import org.json.simple.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Random;
@@ -229,9 +222,9 @@ public class MainActivity extends AppCompatActivity {
                                 }
                                 searchResults = new User[results.length - numberRemoved];
                                 int finalIndex = 0;
-                                for (int i = 0; i < results.length; i++) {
-                                    if (results[i] != null) {
-                                        searchResults[finalIndex] = results[i];
+                                for (User value : results) {
+                                    if (value != null) {
+                                        searchResults[finalIndex] = value;
                                         finalIndex++;
                                     }
                                 }
@@ -385,7 +378,7 @@ public class MainActivity extends AppCompatActivity {
         // Check if the user is already a member of this chat
         if (type == RequestType.AcceptChatInvite) {
             try {
-                ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+                ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                 Chat[] chats = (Chat[]) ois.readObject();
                 for (Chat chat : chats) {
                     if (chat.ChatID == ((ChatInvite) invite).ChatID) {
@@ -483,13 +476,13 @@ public class MainActivity extends AppCompatActivity {
                                 KeyStore keyStore = new KeyStore(new File(getFilesDir(), "KeyStore.bin"));
                                 keyStore.AddKeyPair(chat.PublicKeyID, privateKey);
 
-                                ObjectInputStream ois = new ObjectInputStream(new FileInputStream(new File(getFilesDir(), "Chats.bin")));
+                                ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                                 Chat[] chats = (Chat[]) ois.readObject();
                                 Chat[] newChats = new Chat[chats.length + 1];
                                 System.arraycopy(chats, 0, newChats, 0, chats.length);
                                 newChats[chats.length] = chat;
                                 ois.close();
-                                ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
+                                ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                                 oos.writeObject(newChats);
                                 oos.flush();
                                 oos.close();
@@ -581,6 +574,13 @@ public class MainActivity extends AppCompatActivity {
 
         // Get the message from the text box
         String messageContent = ((EditText) ((View) v.getParent()).findViewById(R.id.MessageEntry)).getText().toString();
+
+        // Ensure that the message is not empty before proceeding
+        if (messageContent.equals("")) {
+            Toast.makeText(this, "Please enter a message first!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         // Get the chat's public key from the server
         JSONObject keyRequest = new JSONObject();
         keyRequest.put("type", RequestType.GetPublicKey);

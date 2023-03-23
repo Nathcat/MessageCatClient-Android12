@@ -16,28 +16,22 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
-
-;
-import com.nathcat.messagecat_database.MessageQueue;
+import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
 import com.nathcat.messagecat_database_entities.FriendRequest;
 import com.nathcat.messagecat_database_entities.User;
 import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
-import com.nathcat.messagecat_database.Result;
+
+import org.json.simple.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.util.Date;
+import java.nio.file.Files;
 
 /**
  * Background service used to handle networking tasks.
@@ -160,7 +154,7 @@ public class NetworkerService extends Service implements Serializable {
     private boolean bound = false;                    // Is the service currently bound to the UI thread
     public User user = null;                          // The user that is currently authenticated
     public int activeChatID = -1;                     // The id of the chat that is currently being viewed, or -1 if none are being viewed
-    public static final String hostName = "192.168.1.26";
+    public static final String hostName = "10.203.73.128";
 
     /**
      * Returns a binder
@@ -261,7 +255,7 @@ public class NetworkerService extends Service implements Serializable {
         if (authDataFile.exists()) {
             // Try to use the data in the auth file to authenticate the client
             try {
-                ObjectInputStream authDataInputStream = new ObjectInputStream(new FileInputStream(authDataFile));
+                ObjectInputStream authDataInputStream = new ObjectInputStream(Files.newInputStream(authDataFile.toPath()));
                 Object userData = authDataInputStream.readObject();
                 authDataInputStream.close();
 
@@ -292,7 +286,7 @@ public class NetworkerService extends Service implements Serializable {
 
                             // Update the data in the auth file
                             try {
-                                ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
+                                ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "UserData.bin").toPath()));
                                 oos.writeObject(response);
                                 oos.flush();
                                 oos.close();
@@ -378,7 +372,7 @@ public class NetworkerService extends Service implements Serializable {
                             if (chatsFile.exists()) {
                                 try {
                                     // Get the array of chats
-                                    ObjectInputStream ois = new ObjectInputStream(new FileInputStream(chatsFile));
+                                    ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(chatsFile.toPath()));
                                     Chat[] chats = (Chat[]) ois.readObject();
 
                                     // Create a listen rule for each of the chats

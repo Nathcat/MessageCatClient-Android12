@@ -7,7 +7,6 @@ import static android.Manifest.permission.READ_SMS;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
-import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -22,7 +21,6 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-;
 import com.nathcat.messagecat_database.Result;
 import com.nathcat.messagecat_database_entities.Chat;
 import com.nathcat.messagecat_database_entities.ChatInvite;
@@ -34,17 +32,14 @@ import com.nathcat.messagecat_server.RequestType;
 import org.json.simple.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Date;
-import java.util.Random;
 
 public class NewUserActivity extends AppCompatActivity {
 
@@ -170,12 +165,12 @@ public class NewUserActivity extends AppCompatActivity {
 
                 // Write the data to the auth file
                 try {
-                    ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
+                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "UserData.bin").toPath()));
                     oos.writeObject(response);
                     oos.flush();
                     oos.close();
 
-                    oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "Chats.bin")));
+                    oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
                     oos.writeObject(new Chat[0]);
                     oos.flush();
                     oos.close();
@@ -205,7 +200,7 @@ public class NewUserActivity extends AppCompatActivity {
 
                                 // Update the data in the auth file
                                 try {
-                                    ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(getFilesDir(), "UserData.bin")));
+                                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "UserData.bin").toPath()));
                                     oos.writeObject(response);
                                     oos.flush();
                                     oos.close();
@@ -290,7 +285,7 @@ public class NewUserActivity extends AppCompatActivity {
                                 if (chatsFile.exists()) {
                                     try {
                                         // Get the array of chats
-                                        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(chatsFile));
+                                        ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(chatsFile.toPath()));
                                         Chat[] chats = (Chat[]) ois.readObject();
 
                                         // Create a listen rule for each of the chats

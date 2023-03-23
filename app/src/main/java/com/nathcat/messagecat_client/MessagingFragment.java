@@ -14,7 +14,6 @@ import android.widget.Toast;
 
 import com.nathcat.RSA.EncryptedObject;
 import com.nathcat.RSA.KeyPair;
-;
 import com.nathcat.RSA.PrivateKeyException;
 import com.nathcat.messagecat_database.KeyStore;
 import com.nathcat.messagecat_database.MessageQueue;
@@ -26,13 +25,9 @@ import com.nathcat.messagecat_server.ListenRule;
 import com.nathcat.messagecat_server.RequestType;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
 
 public class MessagingFragment extends Fragment {
 
