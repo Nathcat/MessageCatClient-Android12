@@ -4,7 +4,10 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Messenger;
+import android.os.RemoteException;
 import android.view.View;
 import android.view.Menu;
 import android.widget.EditText;
@@ -42,6 +45,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
@@ -54,21 +58,52 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
             // Get the networker service instance
-            networkerService = ((NetworkerService.NetworkerServiceBinder) iBinder).getService();
+            SharedData.nsMessenger = new Messenger(iBinder);
 
-            // Set the display name in the nav header to the user's display name
-            ((TextView) ((NavigationView) findViewById(R.id.nav_view))
-                    .getHeaderView(0).findViewById(R.id.displayName))
-                    .setText(networkerService.user.DisplayName);
+            // Get the user data from the networker service
+            try {
+                android.os.Message msg = android.os.Message.obtain(null, NetworkerService.CLIENT_REQUEST_USER);
+                msg.replyTo = SharedData.nsReceiver;
+                msg.obj = new Bundle();
+                ((Bundle) msg.obj).putSerializable("callback", new INSCallback() {
+                    @Override
+                    public void callback(android.os.Message message) {
+                        SharedData.user = (User) ((Bundle) message.obj).getSerializable("user");
+
+                        // Set the display name in the nav header to the user's display name
+                        ((TextView) ((NavigationView) findViewById(R.id.nav_view))
+                                .getHeaderView(0).findViewById(R.id.displayName))
+                                .setText(SharedData.user.DisplayName);
+                    }
+                });
+
+                SharedData.nsMessenger.send(msg);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            networkerService = null;
+            SharedData.nsMessenger = null;
         }
     };
 
-    public NetworkerService networkerService;
+    public static class NSReceiverHandler extends Handler {
+        @Override
+        public void handleMessage(android.os.Message msg) {
+            // Get the callback from the message
+            INSCallback callback = (INSCallback) ((Bundle) msg.obj).getSerializable("callback");
+            callback.callback(msg);
+        }
+    }
+
+    public interface INSCallback extends Serializable {
+        default void callback(android.os.Message msg) {
+
+        }
+    }
+
     private AppBarConfiguration mAppBarConfiguration;
     private ActivityMainBinding binding;
 
@@ -93,6 +128,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        SharedData.nsReceiver = new Messenger(new NSReceiverHandler());
+        SharedData.misc.put("activity", this);
+
         // Bind to the networker service
         bindService(
                 new Intent(this, NetworkerService.class),
@@ -114,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
                 R.id.chatsFragment, R.id.findPeopleFragment)
                 .setOpenableLayout(drawer)
                 .build();
+
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
@@ -183,82 +222,81 @@ public class MainActivity extends AppCompatActivity {
         request.put("selector", "displayName");
         request.put("data", new User(-1, null, null, displayName, null, null));
 
+        SharedData.misc.put("fragmentView", fragmentView);
+
         // Send the request
-        networkerService.SendRequest(new NetworkerService.Request(
-                new NetworkerService.IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        Runnable action;
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onSearchButtonClicked_callback, request));
+    }
 
-                        if (result == Result.FAILED) {
-                            action = () -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show();
-                        }
-                        else {
-                            action = () -> {
+    private static void onSearchButtonClicked_callback(Result result, Object response) {
+        Runnable action;
 
-                                User[] results = (User[]) response;
+        if (result == Result.FAILED) {
+            action = () -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show();
+        }
+        else {
+            action = () -> {
 
-                                // Get the fragment container linear layout to add the result fragments to
-                                LinearLayout fragmentContainerLayout = fragmentView.findViewById(R.id.SearchResultFragmentContainer);
+                User[] results = (User[]) response;
 
-                                fragmentContainerLayout.removeAllViews();
+                // Get the fragment container linear layout to add the result fragments to
+                LinearLayout fragmentContainerLayout = ((View) SharedData.misc.get("fragmentView")).findViewById(R.id.SearchResultFragmentContainer);
 
-                                // If the list of results is empty, hide the no results message
-                                if (results.length == 0) {
-                                    TextView message = new TextView(MainActivity.this);
-                                    message.setText(R.string.no_search_results_message);
+                fragmentContainerLayout.removeAllViews();
 
-                                    ((LinearLayout) fragmentView.findViewById(R.id.SearchResultFragmentContainer)).addView(message);
-                                }
+                // If the list of results is empty, hide the no results message
+                if (results.length == 0) {
+                    TextView message = new TextView(((MainActivity) SharedData.misc.get("activity")));
+                    message.setText(R.string.no_search_results_message);
 
-                                // Clean the results of invalid results
-                                int numberRemoved = 0;
-                                for (int i = 0; i < results.length; i++) {
-                                    // Check if this user is the logged in user
-                                    if (results[i].UserID == networkerService.user.UserID) {
-                                        results[i] = null;
-                                        numberRemoved++;
-                                    }
-                                }
-                                searchResults = new User[results.length - numberRemoved];
-                                int finalIndex = 0;
-                                for (User value : results) {
-                                    if (value != null) {
-                                        searchResults[finalIndex] = value;
-                                        finalIndex++;
-                                    }
-                                }
+                    ((LinearLayout) ((View) SharedData.misc.get("fragmentView")).findViewById(R.id.SearchResultFragmentContainer)).addView(message);
+                }
 
-                                // Add each of the results to the fragment container layout
-                                for (User user : searchResults) {
-                                    // Generate a random id for the fragment container
-                                    int id = new Random().nextInt();
-
-                                    FragmentContainerView fragmentContainer = new FragmentContainerView(MainActivity.this);
-                                    fragmentContainer.setId(id);
-
-                                    // Create the argument bundle to pass to the fragment
-                                    Bundle bundle = new Bundle();
-                                    bundle.putSerializable("user", user);
-
-                                    // Add the fragment to the fragment container view
-                                    MainActivity.this.getSupportFragmentManager().beginTransaction()
-                                            .setReorderingAllowed(true)
-                                            .add(id, UserSearchFragment.class, bundle)
-                                            .commit();
-
-                                    // Add the fragment container view to the linear layout
-                                    fragmentContainerLayout.addView(fragmentContainer);
-                                }
-                            };
-                        }
-
-                        // Run the predetermined action on the UI thread
-                        MainActivity.this.runOnUiThread(action);
+                // Clean the results of invalid results
+                int numberRemoved = 0;
+                for (int i = 0; i < results.length; i++) {
+                    // Check if this user is the logged in user
+                    if (results[i].UserID == SharedData.user.UserID) {
+                        results[i] = null;
+                        numberRemoved++;
                     }
+                }
 
-                },
-                request));
+                ((MainActivity) SharedData.misc.get("activity")).searchResults = new User[results.length - numberRemoved];
+                int finalIndex = 0;
+                for (User value : results) {
+                    if (value != null) {
+                        ((MainActivity) SharedData.misc.get("activity")).searchResults[finalIndex] = value;
+                        finalIndex++;
+                    }
+                }
+
+                // Add each of the results to the fragment container layout
+                for (User user : ((MainActivity) SharedData.misc.get("activity")).searchResults) {
+                    // Generate a random id for the fragment container
+                    int id = new Random().nextInt();
+
+                    FragmentContainerView fragmentContainer = new FragmentContainerView(((MainActivity) SharedData.misc.get("activity")));
+                    fragmentContainer.setId(id);
+
+                    // Create the argument bundle to pass to the fragment
+                    Bundle bundle = new Bundle();
+                    bundle.putSerializable("user", user);
+
+                    // Add the fragment to the fragment container view
+                    ((MainActivity) SharedData.misc.get("activity")).getSupportFragmentManager().beginTransaction()
+                            .setReorderingAllowed(true)
+                            .add(id, UserSearchFragment.class, bundle)
+                            .commit();
+
+                    // Add the fragment container view to the linear layout
+                    fragmentContainerLayout.addView(fragmentContainer);
+                }
+            };
+        }
+
+        // Run the predetermined action on the UI thread
+        ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(action);
     }
 
     /**
@@ -281,23 +319,20 @@ public class MainActivity extends AppCompatActivity {
         // Create a request to send a friend request
         JSONObject request = new JSONObject();
         request.put("type", RequestType.SendFriendRequest);
-        request.put("data", new FriendRequest(-1, networkerService.user.UserID, user.UserID, new Date().getTime()));
+        request.put("data", new FriendRequest(-1, user.UserID, user.UserID, new Date().getTime()));
 
         // Send the request to the server
-        networkerService.SendRequest(new NetworkerService.Request(
-                new NetworkerService.IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        // Notify the user of the result
-                        if (result == Result.SUCCESS) {
-                            MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Friend request sent!", Toast.LENGTH_SHORT).show());
-                        }
-                        else {
-                            MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                        }
-                    }
-                }, request
-        ));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onAddFriendButtonClicked_callback, request));
+    }
+
+    private static void onAddFriendButtonClicked_callback(Result result, Object response) {
+        // Notify the user of the result
+        if (result == Result.SUCCESS) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Friend request sent!", Toast.LENGTH_SHORT).show());
+        }
+        else {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+        }
     }
 
     /**
@@ -317,12 +352,8 @@ public class MainActivity extends AppCompatActivity {
 
         assert friend != null;
 
-        Intent intent = new Intent(this, InviteToChatActivity.class);
-        Bundle bundle = new Bundle();
-        bundle.putSerializable("userToInvite", friend);
-        intent.putExtras(bundle);
-
-        startActivity(intent);
+        SharedData.misc.put("userToInvite", friend);
+        startActivity(new Intent(this, InviteToChatActivity.class));
     }
 
     /**
@@ -397,115 +428,94 @@ public class MainActivity extends AppCompatActivity {
         request.put("type", type);
         request.put("data", invite);
 
-        Object finalInvite = invite;
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
+        SharedData.misc.put("invite", invite);
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onAcceptInviteClicked_callback, request));
+    }
 
-                // Check if the response is a string
-                if (response.getClass() == String.class) {
-                    // Output an appropriate message based on the response
-                    if (response.equals("failed")) {
-                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to accept invite :(", Toast.LENGTH_SHORT).show());
-                    }
-                    else {
-                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
+    private static void onAcceptInviteClicked_callback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
 
-                        if (finalInvite.getClass() == ChatInvite.class) {
-                            JSONObject getChatRequest = new JSONObject();
-                            getChatRequest.put("type", RequestType.GetChat);
-                            getChatRequest.put("data", new Chat(((ChatInvite) finalInvite).ChatID, null, null, -1));
-
-                            networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                                @Override
-                                public void callback(Result result, Object response) {
-                                    // Add a message listen rule for the new chat
-                                    JSONObject lrRequest = new JSONObject();
-                                    lrRequest.put("type", RequestType.AddListenRule);
-                                    lrRequest.put("data", new ListenRule(RequestType.SendMessage, "ChatID", ((ChatInvite) finalInvite).ChatID));
-
-                                    Bundle bundle = new Bundle();
-                                    bundle.putSerializable("chat", (Chat) response);
-
-                                    networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-                                        @Override
-                                        public void callback(Object response, Bundle bundle) {
-                                            if (networkerService.activeChatID != ((Chat) bundle.getSerializable("chat")).ChatID) {
-                                                // Create a notification
-                                                networkerService.notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
-                                            }
-                                        }
-
-                                    }, new NetworkerService.IRequestCallback() {
-                                        @Override
-                                        public void callback(Result result, Object response) {
-                                            NetworkerService.IRequestCallback.super.callback(result, response);
-                                        }
-                                    }, lrRequest, bundle));
-                                }
-                            }, getChatRequest));
-                        }
-                    }
-                    MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
-                }
-                else {  // In this case the response will be a key pair, and the invite must have been a chat invite
-                    assert finalInvite instanceof ChatInvite;
-                    KeyPair privateKey = (KeyPair) response;
-
-                    // Request the chat as we need it's public key id to store it in the internal key store
-                    JSONObject chatRequest = new JSONObject();
-                    chatRequest.put("type", RequestType.GetChat);
-                    chatRequest.put("data", new Chat(((ChatInvite) finalInvite).ChatID, "", "", -1));
-
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            if (result == Result.FAILED) {
-                                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                                System.exit(1);
-                            }
-
-                            Chat chat = (Chat) response;
-
-                            // Add the private key to the key store and the chat to the chats file
-                            try {
-                                KeyStore keyStore = new KeyStore(new File(getFilesDir(), "KeyStore.bin"));
-                                keyStore.AddKeyPair(chat.PublicKeyID, privateKey);
-
-                                ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
-                                Chat[] chats = (Chat[]) ois.readObject();
-                                Chat[] newChats = new Chat[chats.length + 1];
-                                System.arraycopy(chats, 0, newChats, 0, chats.length);
-                                newChats[chats.length] = chat;
-                                ois.close();
-                                ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
-                                oos.writeObject(newChats);
-                                oos.flush();
-                                oos.close();
-
-
-                            } catch (IOException | ClassNotFoundException e) {
-                                e.printStackTrace();
-                                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                                System.exit(1);
-                            }
-
-                            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite accepted!", Toast.LENGTH_SHORT).show());
-                            MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, chatRequest));
-
-                }
-
-                networkerService.waitingForResponse = false;
+        // Check if the response is a string
+        if (response.getClass() == String.class) {
+            // Output an appropriate message based on the response
+            if (response.equals("failed")) {
+                ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Failed to accept invite :(", Toast.LENGTH_SHORT).show());
             }
-        }, request));
+            else {
+                ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Invite accepted!", Toast.LENGTH_SHORT).show());
+            }
+
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((MainActivity) SharedData.misc.get("activity")).invitationsFragment.reloadInvites());
+        }
+        else {  // In this case the response will be a key pair, and the invite must have been a chat invite
+            assert SharedData.misc.get("invite") instanceof ChatInvite;
+            SharedData.misc.put("privateKey", response);
+
+            // Request the chat as we need it's public key id to store it in the internal key store
+            JSONObject chatRequest = new JSONObject();
+            chatRequest.put("type", RequestType.GetChat);
+            chatRequest.put("data", new Chat(((ChatInvite) SharedData.misc.get("invite")).ChatID, "", "", -1));
+
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onAcceptInviteClicked_callback_getPublicKey, chatRequest));
+
+            // Register a new listen rule so that the user can see messages from this chat without having to restart the application
+            JSONObject getChatRequest = new JSONObject();
+            getChatRequest.put("type", RequestType.GetChat);
+            getChatRequest.put("data", new Chat(((ChatInvite) SharedData.misc.get("invite")).ChatID, null, null, -1));
+
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onAcceptInviteClicked_callback_addListenRuleForNewChat, getChatRequest));
+
+        }
+    }
+
+    private static void onAcceptInviteClicked_callback_addListenRuleForNewChat(Result result, Object response) {
+        // Add a message listen rule for the new chat
+        JSONObject lrRequest = new JSONObject();
+        lrRequest.put("type", RequestType.AddListenRule);
+        lrRequest.put("data", new ListenRule(RequestType.SendMessage, "ChatID", ((ChatInvite) SharedData.misc.get("invite")).ChatID));
+
+        Bundle bundle = new Bundle();
+        bundle.putSerializable("chat", (Chat) response);
+
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest(NetworkerService::messageLrCallback, (Result r1, Object r2) -> {}, lrRequest, bundle));
+    }
+
+    private static void onAcceptInviteClicked_callback_getPublicKey(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        Chat chat = (Chat) response;
+
+        // Add the private key to the key store and the chat to the chats file
+        try {
+            KeyStore keyStore = new KeyStore(new File(((MainActivity) SharedData.misc.get("activity")).getFilesDir(), "KeyStore.bin"));
+            keyStore.AddKeyPair(chat.PublicKeyID, ((KeyPair) SharedData.misc.get("privateKey")));
+
+            ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(((MainActivity) SharedData.misc.get("activity")).getFilesDir(), "Chats.bin").toPath()));
+            Chat[] chats = (Chat[]) ois.readObject();
+            Chat[] newChats = new Chat[chats.length + 1];
+            System.arraycopy(chats, 0, newChats, 0, chats.length);
+            newChats[chats.length] = chat;
+            ois.close();
+            ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(((MainActivity) SharedData.misc.get("activity")).getFilesDir(), "Chats.bin").toPath()));
+            oos.writeObject(newChats);
+            oos.flush();
+            oos.close();
+
+
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Invite accepted!", Toast.LENGTH_SHORT).show());
+        ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((MainActivity) SharedData.misc.get("activity")).invitationsFragment.reloadInvites());
     }
 
     /**
@@ -537,34 +547,33 @@ public class MainActivity extends AppCompatActivity {
         request.put("type", type);
         request.put("data", invite);
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::onDeclineInviteClicked_callback, request));
+    }
 
-                // Output an appropriate message based on the response
-                if (response.equals("failed")) {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to decline invite :(", Toast.LENGTH_SHORT).show());
-                }
-                else {
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Invite declined!", Toast.LENGTH_SHORT).show());
-                }
+    private static void onDeclineInviteClicked_callback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
 
-                MainActivity.this.runOnUiThread(() -> invitationsFragment.reloadInvites());
+        // Output an appropriate message based on the response
+        if (response.equals("failed")) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Failed to decline invite :(", Toast.LENGTH_SHORT).show());
+        }
+        else {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Invite declined!", Toast.LENGTH_SHORT).show());
+        }
 
-                networkerService.waitingForResponse = false;
-            }
-        }, request));
+        ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((MainActivity) SharedData.misc.get("activity")).invitationsFragment.reloadInvites());
     }
 
     /**
      * Sends a message to the currently active chat
      * @param v The view that called this method
      */
-    public void SendMessage(View v) throws IOException {
+    public void SendMessage(View v) {
+        SharedData.misc.put("v", v);
+
         // Hide the send button and show the loading wheel
         v.setVisibility(View.GONE);
         ((View) v.getParent()).findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.VISIBLE);
@@ -574,6 +583,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Get the message from the text box
         String messageContent = ((EditText) ((View) v.getParent()).findViewById(R.id.MessageEntry)).getText().toString();
+
+        SharedData.misc.put("messageContent", messageContent);
+        SharedData.misc.put("chat", chat);
 
         // Ensure that the message is not empty before proceeding
         if (messageContent.equals("")) {
@@ -586,54 +598,52 @@ public class MainActivity extends AppCompatActivity {
         keyRequest.put("type", RequestType.GetPublicKey);
         keyRequest.put("data", chat.PublicKeyID);
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED || response == null) {
-                    MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
-
-                // Encrypt the message contents using the public key
-                assert response != null;
-                KeyPair publicKey = (KeyPair) response;
-                EncryptedObject eContent = null;
-                try {
-                    eContent = publicKey.encrypt(messageContent);
-
-                } catch (PublicKeyException e) {
-                    MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
-
-                assert eContent != null;
-
-                // Create the message object to send to the server
-                Message message = new Message(networkerService.user.UserID, chat.ChatID, new Date().getTime(), eContent);
-
-                JSONObject sendRequest = new JSONObject();
-                sendRequest.put("type", RequestType.SendMessage);
-                sendRequest.put("data", message);
-
-                networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        if (result == Result.FAILED || response == null) {
-                            MainActivity.this.runOnUiThread(() -> Toast.makeText(MainActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                            System.exit(1);
-                        }
-
-                        runOnUiThread(() -> {
-                            // Hide the loading wheel and show the send button
-                            v.setVisibility(View.VISIBLE);
-                            ((View) v.getParent()).findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.GONE);
-                        });
-                    }
-                }, sendRequest));
-            }
-        }, keyRequest));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::sendMessage_callback_getPublicKey, keyRequest));
 
         // Clear the text box
         ((EditText) ((View) v.getParent()).findViewById(R.id.MessageEntry)).setText("");
+    }
+
+    private static void sendMessage_callback_getPublicKey(Result result, Object response) {
+        if (result == Result.FAILED || response == null) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        // Encrypt the message contents using the public key
+        assert response != null;
+        KeyPair publicKey = (KeyPair) response;
+        EncryptedObject eContent = null;
+        try {
+            eContent = publicKey.encrypt(SharedData.misc.get("messageContent"));
+
+        } catch (PublicKeyException e) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        assert eContent != null;
+
+        // Create the message object to send to the server
+        Message message = new Message(SharedData.user.UserID, ((Chat) SharedData.misc.get("chat")).ChatID, new Date().getTime(), eContent);
+
+        JSONObject sendRequest = new JSONObject();
+        sendRequest.put("type", RequestType.SendMessage);
+        sendRequest.put("data", message);
+
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MainActivity::sendMessage_callback_sendMessage, sendRequest));
+    }
+
+    private static void sendMessage_callback_sendMessage(Result result, Object response) {
+        if (result == Result.FAILED || response == null) {
+            ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((MainActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        ((MainActivity) SharedData.misc.get("activity")).runOnUiThread(() -> {
+            // Hide the loading wheel and show the send button
+            ((View) SharedData.misc.get("v")).setVisibility(View.VISIBLE);
+            ((View) ((View) SharedData.misc.get("v")).getParent()).findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.GONE);
+        });
     }
 }

@@ -75,7 +75,7 @@ public class ListenRuleCallbackHandler extends Thread {
                     // If the id matches, perform the callback
                     if (this.connectionHandler.listenRules.get(i).listenRule.getId() == (int) triggerRequest.get("triggerID")) {
                         if (this.connectionHandler.listenRules.get(i).bundle == null) {
-                            this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest);
+                            this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest, null);
                         }
                         else {
                             this.connectionHandler.listenRules.get(i).callback.callback(triggerRequest, this.connectionHandler.listenRules.get(i).bundle);

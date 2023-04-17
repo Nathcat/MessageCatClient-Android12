@@ -29,10 +29,9 @@ public class ConnectionHandler extends Handler {
     public ObjectInputStream ois = null;   // Object input stream
     public KeyPair keyPair = null;         // The client's key pair
     public KeyPair serverKeyPair = null;   // The server's key pair
-    public final Context context;          // The context this handler was created in
     public int connectionHandlerId;        // The identifier of the connection handler this handler has connected to
     public ListenRuleCallbackHandler callbackHandler;
-
+    public NetworkerService ns;
     public static class ListenRuleRecord {
         public final ListenRule listenRule;
         public final NetworkerService.IListenRuleCallback callback;
@@ -47,10 +46,9 @@ public class ConnectionHandler extends Handler {
 
     public ArrayList<ListenRuleRecord> listenRules = new ArrayList<>();
 
-    public ConnectionHandler(Context context, Looper looper) {
-        super(looper);  // Handler constructor
-
-        this.context = context;
+    public ConnectionHandler(Looper looper, NetworkerService ns) {
+        super(looper);
+        this.ns = ns;
     }
 
     /**
@@ -58,7 +56,7 @@ public class ConnectionHandler extends Handler {
      * @param obj The object to send
      * @throws IOException Thrown in case of I/O issues
      */
-    public void Send(Object obj) throws IOException {
+    private void Send(Object obj) throws IOException {
         oos.writeObject(obj);
         oos.flush();
     }
@@ -69,66 +67,71 @@ public class ConnectionHandler extends Handler {
      * @throws IOException Thrown by I/O issues
      * @throws ClassNotFoundException Thrown if the required class cannot be found
      */
-    public Object Receive() throws IOException, ClassNotFoundException {
+    private Object Receive() throws IOException, ClassNotFoundException {
         return ois.readObject();
     }
 
     /**
-     * Handles messages passed to the handler.
-     *
-     * @param msg The message passed to the handler
+     * Start a connection to the server
+     * @return Result code describing whether or not the connection was successful
      */
-    @Override
-    public void handleMessage(Message msg) {
-        // If the 'what' parameter of the message is 0, that indicates an initialisation request
-        // This should only occur when the service is first started
-        if (msg.what == 0) {
-            try {
-                // Try to connect to the server
-                this.s = new Socket(NetworkerService.hostName, 1234);
-                this.s.setSoTimeout(20000);
-                this.oos = new ObjectOutputStream(s.getOutputStream());
-                this.ois = new ObjectInputStream(s.getInputStream());
+    public Result StartConnection() {
+        try {
+            // Try to connect to the server
+            this.s = new Socket(NetworkerService.hostName, 1234);
+            this.s.setSoTimeout(20000);
+            this.oos = new ObjectOutputStream(s.getOutputStream());
+            this.ois = new ObjectInputStream(s.getInputStream());
 
-                // Create a key pair and perform the handshake
-                this.keyPair = RSA.GenerateRSAKeyPair();
-                this.serverKeyPair = (KeyPair) this.Receive();
+            // Create a key pair and perform the handshake
+            this.keyPair = RSA.GenerateRSAKeyPair();
+            this.serverKeyPair = (KeyPair) this.Receive();
 
-                this.Send(new KeyPair(this.keyPair.pub, null));
+            this.Send(new KeyPair(this.keyPair.pub, null));
 
-                this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
-                System.out.println("Got handler id: " + connectionHandlerId);
+            this.connectionHandlerId = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+            System.out.println("Got handler id: " + connectionHandlerId);
 
-                int port = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
-                System.out.println("Got port: " + port);
+            int port = (int) this.keyPair.decrypt((EncryptedObject) this.Receive());
+            System.out.println("Got port: " + port);
 
-                callbackHandler = new ListenRuleCallbackHandler(this, keyPair, serverKeyPair, port);
-                callbackHandler.setDaemon(true);
-                callbackHandler.start();
-
-            } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException e) {
-                e.printStackTrace();
-            }
+            callbackHandler = new ListenRuleCallbackHandler(this, keyPair, serverKeyPair, port);
+            callbackHandler.setDaemon(true);
+            callbackHandler.start();
 
             assert this.s != null && this.oos != null && this.ois != null && this.keyPair != null && this.serverKeyPair != null;
-            return;
-        }
-        else if (msg.what == 2) {
-            try {
-                this.oos.close();
-                this.ois.close();
-                this.s.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
 
-            this.getLooper().quit();
-            return;
+        } catch (IOException | NoSuchAlgorithmException | ClassNotFoundException | PrivateKeyException | AssertionError e) {
+            e.printStackTrace();
+            return Result.FAILED;
         }
 
-        // This point will only be reached if the 'what' parameter of the message is not 0
-        // Get the request object from the message
-        NetworkerService.Request request = (NetworkerService.Request) msg.obj;
+        return Result.SUCCESS;
+    }
+
+    /**
+     * Close the connection to the server
+     * @return Result code describing whether or not the closure was successful
+     */
+    public Result CloseConnection() {
+        try {
+            this.oos.close();
+            this.ois.close();
+            this.s.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return Result.FAILED;
+        }
+
+        return Result.SUCCESS;
+    }
+
+    /**
+     * Handle a request
+     * @param request The request to handle, this may be any type of request (listen rule or regular)
+     */
+    public void HandleRequest(NetworkerService.Request request) {
+        SharedData.nsWaitingForResponse = true;
 
         if (((JSONObject) request.request).get("type") == RequestType.AddListenRule) {
             NetworkerService.ListenRuleRequest lrRequest = (NetworkerService.ListenRuleRequest) request;
@@ -184,6 +187,19 @@ public class ConnectionHandler extends Handler {
                 // Perform callback with failure code
                 request.callback.callback(Result.FAILED, null);
             }
+        }
+
+        SharedData.nsWaitingForResponse = false;
+    }
+
+    @Override
+    public void handleMessage(Message msg) {
+        switch (msg.what) {
+            case 0: StartConnection(); break;
+
+            case 1: HandleRequest((NetworkerService.Request) ((Bundle) msg.obj).getSerializable("request")); break;
+
+            case 2: CloseConnection(); break;
         }
     }
 }

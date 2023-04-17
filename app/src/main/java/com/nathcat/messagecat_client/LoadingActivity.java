@@ -8,37 +8,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
+import android.os.RemoteException;
 
 public class LoadingActivity extends AppCompatActivity {
-    /**
-     * Thread to wait for authentication to complete, if it is not already complete
-     */
-    private class WaitForAuthThread extends Thread {
-        @Override
-        public void run() {
-            if (networkerService.authenticated) {
-                startActivity(new Intent(LoadingActivity.this, MainActivity.class));
-            }
-
-            while (networkerService.waitingForResponse) {
-                try {
-                    Thread.sleep(100);
-
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            if (networkerService.authenticated) {
-                startActivity(new Intent(LoadingActivity.this, MainActivity.class));
-            }
-            else {
-                startActivity(new Intent(LoadingActivity.this, NewUserActivity.class));
-            }
-        }
-    }
-
     // This is used to connect to the networker service
     private ServiceConnection networkerServiceConnection = new ServiceConnection() {
 
@@ -49,12 +25,23 @@ public class LoadingActivity extends AppCompatActivity {
          */
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            System.out.println("Bound");
             // Get the service instance
-            networkerService = ((NetworkerService.NetworkerServiceBinder) iBinder).getService();
+            networkerServiceMessenger = new Messenger(iBinder);
             bound = true;
 
-            // Wait for authentication to complete
-            new WaitForAuthThread().start();
+            try {
+                Message msg = Message.obtain(null, NetworkerService.CLIENT_REGISTER_FOR_EVENTS);
+                msg.replyTo = nsReceiver;
+                networkerServiceMessenger.send(msg);
+
+                msg = Message.obtain(null, NetworkerService.CLIENT_REQUEST_AUTH_STATE);
+                msg.replyTo = nsReceiver;
+                networkerServiceMessenger.send(msg);
+
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         /**
@@ -63,12 +50,29 @@ public class LoadingActivity extends AppCompatActivity {
          */
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            networkerService = null;
+            networkerServiceMessenger = null;
             bound = false;
         }
     };
 
-    private NetworkerService networkerService = null;  // The instance of the networker service
+    public class NSReceiverHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.arg1 == NetworkerService.EVENTS_AUTH_SUCCESS) {
+                // Load the main activity
+                startActivity(new Intent(LoadingActivity.this, MainActivity.class));
+            }
+            else if (msg.arg1 == NetworkerService.EVENTS_AUTH_FAILED_INVALID_USER) {
+                // Load the new user activity
+                startActivity(new Intent(LoadingActivity.this, NewUserActivity.class));
+            }
+            else {
+                System.out.println("Unexpected event! Code: " + msg.what);
+            }
+        }
+    }
+    private Messenger networkerServiceMessenger = null;  // Messenger to the networker service
+    public Messenger nsReceiver;                         // Messenger which receives messages from the networker service
     private boolean bound = false;                     // Is the service currently bound to this process
 
     @Override
@@ -79,10 +83,14 @@ public class LoadingActivity extends AppCompatActivity {
 
         // Check if the networker service is not running
         if (!isServiceRunning(NetworkerService.class)) {
+            System.out.println("Service start is being called");
             // Start the foreground service
             startForegroundService(new Intent(this, NetworkerService.class));
         }
 
+        nsReceiver = new Messenger(new NSReceiverHandler());
+
+        System.out.println("Attempting bind");
         // Try to bind to the networker service
         bindService(
                 new Intent(this, NetworkerService.class),  // The intent to bind with

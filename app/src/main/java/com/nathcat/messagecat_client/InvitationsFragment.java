@@ -5,6 +5,7 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
+import android.os.Messenger;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -61,112 +62,99 @@ public class InvitationsFragment extends Fragment {
         // Remove all the invites from the main activity array
         ((MainActivity) requireActivity()).invitationFragments.clear();
 
-        // Get the networker service from the main activity
-        NetworkerService networkerService = ((MainActivity) requireActivity()).networkerService;
-
         // Request incoming friend requests from the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetFriendRequests);
-        request.put("data", new FriendRequest(-1, -1, networkerService.user.UserID, -1));
+        request.put("data", new FriendRequest(-1, -1, SharedData.user.UserID, -1));
         request.put("selector", "recipientID");
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
+        SharedData.misc.put("fragment", this);
 
-                friendRequests = (FriendRequest[]) response;
-                if (friendRequests.length != 0) {
-                    requireActivity().runOnUiThread(() -> { try { requireView().findViewById(R.id.noInvitesMessage).setVisibility(View.GONE); } catch (NullPointerException ignored) {} });
-                }
-
-                for (FriendRequest fr : friendRequests) {
-                    JSONObject userRequest = new JSONObject();
-                    userRequest.put("type", RequestType.GetUser);
-                    userRequest.put("selector", "id");
-                    userRequest.put("data", new User(fr.SenderID, "", "", "", "", ""));
-
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            if (result == Result.FAILED) {
-                                requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                                System.exit(1);
-                            }
-
-                            User user = (User) response;
-                            Bundle bundle = new Bundle();
-                            bundle.putSerializable("invite", fr);
-                            bundle.putString("text", user.DisplayName + " wants to be friends!");
-
-                            getChildFragmentManager().beginTransaction()
-                                    .setReorderingAllowed(true)
-                                    .add(R.id.InvitationsContainer, InvitationFragment.class, bundle)
-                                    .commit();
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, userRequest));
-                }
-
-                networkerService.waitingForResponse = false;
-            }
-        }, request));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(InvitationsFragment::getFriendRequestsCallback, request));
 
         // Request incoming chat requests from the server
         JSONObject chatInviteRequest = new JSONObject();
         chatInviteRequest.put("type", RequestType.GetChatInvite);
-        chatInviteRequest.put("data", new ChatInvite(-1, -1, -1, networkerService.user.UserID, -1, -1));
+        chatInviteRequest.put("data", new ChatInvite(-1, -1, -1, SharedData.user.UserID, -1, -1));
         chatInviteRequest.put("selector", "recipientID");
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(InvitationsFragment::getChatInvitesCallback, chatInviteRequest));
+    }
+
+    //
+    // Callbacks
+    //
+
+    private static void getFriendRequestsCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((InvitationsFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        ((InvitationsFragment) SharedData.misc.get("fragment")).friendRequests = (FriendRequest[]) response;
+        if (((InvitationsFragment) SharedData.misc.get("fragment")).friendRequests.length != 0) {
+            ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> { try { ((InvitationsFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.noInvitesMessage).setVisibility(View.GONE); } catch (NullPointerException ignored) {} });
+        }
+
+        for (FriendRequest fr : ((InvitationsFragment) SharedData.misc.get("fragment")).friendRequests) {
+            JSONObject userRequest = new JSONObject();
+            userRequest.put("type", RequestType.GetUser);
+            userRequest.put("selector", "id");
+            userRequest.put("data", new User(fr.SenderID, "", "", "", "", ""));
+
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request((Result r1, Object r2) -> {
+                if (r1 == Result.FAILED) {
+                    ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((InvitationsFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
                     System.exit(1);
                 }
 
-                chatInvites = (ChatInvite[]) response;
+                User user = (User) r2;
+                Bundle bundle = new Bundle();
+                bundle.putSerializable("invite", fr);
+                bundle.putString("text", user.DisplayName + " wants to be friends!");
 
-                if (chatInvites.length != 0) {
-                    requireActivity().runOnUiThread(() -> { try { requireView().findViewById(R.id.noInvitesMessage).setVisibility(View.GONE); } catch (NullPointerException ignored) {} });
+                ((InvitationsFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
+                        .setReorderingAllowed(true)
+                        .add(R.id.InvitationsContainer, InvitationFragment.class, bundle)
+                        .commit();
+            }, userRequest));
+        }
+    }
+
+    private static void getChatInvitesCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((InvitationsFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        ((InvitationsFragment) SharedData.misc.get("fragment")).chatInvites = (ChatInvite[]) response;
+
+        if (((InvitationsFragment) SharedData.misc.get("fragment")).chatInvites.length != 0) {
+            ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> { try { ((InvitationsFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.noInvitesMessage).setVisibility(View.GONE); } catch (NullPointerException ignored) {} });
+        }
+
+        for (ChatInvite inv : ((InvitationsFragment) SharedData.misc.get("fragment")).chatInvites) {
+            JSONObject userRequest = new JSONObject();
+            userRequest.put("type", RequestType.GetUser);
+            userRequest.put("selector", "id");
+            userRequest.put("data", new User(inv.SenderID, "", "", "", "", ""));
+
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request((Result r1, Object r2) -> {
+                if (r1 == Result.FAILED) {
+                    ((InvitationsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((InvitationsFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+                    System.exit(1);
                 }
 
-                for (ChatInvite inv : chatInvites) {
-                    JSONObject userRequest = new JSONObject();
-                    userRequest.put("type", RequestType.GetUser);
-                    userRequest.put("selector", "id");
-                    userRequest.put("data", new User(inv.SenderID, "", "", "", "", ""));
+                User user = (User) r2;
+                Bundle bundle = new Bundle();
+                bundle.putSerializable("invite", inv);
+                bundle.putString("text", user.DisplayName + " wants to chat!");
 
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            if (result == Result.FAILED) {
-                                requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                                System.exit(1);
-                            }
-
-                            User user = (User) response;
-                            Bundle bundle = new Bundle();
-                            bundle.putSerializable("invite", inv);
-                            bundle.putString("text", user.DisplayName + " wants to chat!");
-
-                            getChildFragmentManager().beginTransaction()
-                                    .setReorderingAllowed(true)
-                                    .add(R.id.InvitationsContainer, InvitationFragment.class, bundle)
-                                    .commit();
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, userRequest));
-                }
-
-                networkerService.waitingForResponse = false;
-            }
-        }, chatInviteRequest));
+                ((InvitationsFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
+                        .setReorderingAllowed(true)
+                        .add(R.id.InvitationsContainer, InvitationFragment.class, bundle)
+                        .commit();
+            }, userRequest));
+        }
     }
 }

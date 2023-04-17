@@ -33,7 +33,8 @@
             android:windowSoftInputMode="adjustNothing"
             />
 
-        <service android:name=".NetworkerService" />
+        <service android:name=".NetworkerService"
+            android:process=":networker" />
 
         <activity
             android:name=".LoadingActivity"

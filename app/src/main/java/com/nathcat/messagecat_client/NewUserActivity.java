@@ -13,7 +13,11 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
+import android.os.RemoteException;
 import android.telephony.TelephonyManager;
 import android.view.View;
 import android.view.WindowManager;
@@ -35,6 +39,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
@@ -46,16 +51,62 @@ public class NewUserActivity extends AppCompatActivity {
     private ServiceConnection networkerServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            networkerService = ((NetworkerService.NetworkerServiceBinder) iBinder).getService();
+            SharedData.nsMessenger = new Messenger(iBinder);
             bound = true;
         }
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            networkerService = null;
+            SharedData.nsMessenger = null;
             bound = false;
         }
     };
+
+    public class NSReceiverHandler extends Handler {
+        @Override
+        public void handleMessage(android.os.Message msg) {
+            switch (msg.arg1) {
+                case NetworkerService.EVENTS_AUTH_SUCCESS:
+                    // Add the notification listen rules
+                    JSONObject friendRequestRuleRequest = new JSONObject();
+                    friendRequestRuleRequest.put("type", RequestType.AddListenRule);
+                    friendRequestRuleRequest.put("data", new ListenRule(RequestType.SendFriendRequest, "RecipientID", SharedData.user.UserID));
+                    NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest(NetworkerService::friendRequestLrCallback, (Result result, Object response) -> {}, friendRequestRuleRequest));
+
+                    JSONObject chatRequestRuleRequest = new JSONObject();
+                    chatRequestRuleRequest.put("type", RequestType.AddListenRule);
+                    chatRequestRuleRequest.put("data", new ListenRule(RequestType.SendChatInvite, "RecipientID", SharedData.user.UserID));
+                    NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest(NetworkerService::chatInvitationLrCallback, (Result result, Object response) -> {}, chatRequestRuleRequest));
+
+                    File chatsFile = new File(getFilesDir(), "Chats.bin");
+                    if (chatsFile.exists()) {
+                        try {
+                            // Get the array of chats
+                            ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(chatsFile.toPath()));
+                            Chat[] chats = (Chat[]) ois.readObject();
+
+                            // Create a listen rule for each of the chats
+                            for (Chat chat : chats) {
+                                JSONObject msgRule = new JSONObject();
+                                msgRule.put("type", RequestType.AddListenRule);
+                                msgRule.put("data", new ListenRule(RequestType.SendMessage, "ChatID", chat.ChatID));
+                                Bundle bundle = new Bundle();
+                                bundle.putSerializable("chat", chat);
+
+                                NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest(NetworkerService::messageLrCallback, (Result result, Object response) -> {}, msgRule, bundle));
+                            }
+
+                        } catch (IOException | ClassNotFoundException e) {
+                            e.printStackTrace();
+                        }
+
+                    } break;
+
+                case NetworkerService.EVENTS_AUTH_FAILED_INVALID_USER:
+                    throw new RuntimeException(new Exception("Unexpected authentication failure"));
+            }
+        }
+    }
 
     private EditText displayNameEntry;
     private EditText phoneNumberEntry;
@@ -65,8 +116,16 @@ public class NewUserActivity extends AppCompatActivity {
     private EditText passwordEntry;
     private EditText passwordRetypeEntry;
 
-    private final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-    private NetworkerService networkerService;
+    private static final MessageDigest digest;
+
+    static {
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private boolean bound = false;
 
     public NewUserActivity() throws NoSuchAlgorithmException {
@@ -79,6 +138,9 @@ public class NewUserActivity extends AppCompatActivity {
 
         loadingWheel = (ProgressBar) findViewById(R.id.newUserLoadingWheel);
         loadingWheel.setVisibility(View.GONE);
+
+        SharedData.nsReceiver = new Messenger(new NewUserActivity.NSReceiverHandler());
+        SharedData.misc.put("activity", this);
 
         bindService(
                 new Intent(this, NetworkerService.class),
@@ -144,192 +206,9 @@ public class NewUserActivity extends AppCompatActivity {
         request.put("type", RequestType.AddUser);
         request.put("data", new User(-1, phoneNumberEntry.getText().toString(), hashedPassword, displayNameEntry.getText().toString(), new Date().toString(), "default.png"));
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    networkerService.startConnectionHandler();
-                    runOnUiThread(() -> onSubmitButtonClicked(v));
-                }
+        SharedData.misc.put("v", v);
 
-                // Check if the response is null
-                // If this is the case then the entry had duplicate data
-                if (response == null) {
-                    NewUserActivity.this.runOnUiThread(() -> {
-                        Toast.makeText(NewUserActivity.this, "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show();
-                        loadingWheel.setVisibility(View.GONE);
-                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                    });
-                    return;
-                }
-
-                // Write the data to the auth file
-                try {
-                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "UserData.bin").toPath()));
-                    oos.writeObject(response);
-                    oos.flush();
-                    oos.close();
-
-                    oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
-                    oos.writeObject(new Chat[0]);
-                    oos.flush();
-                    oos.close();
-
-                    // Now start an authentication request and start up the loading screen
-                    JSONObject authRequest = new JSONObject();
-                    authRequest.put("type", RequestType.Authenticate);
-                    authRequest.put("data", response);
-
-                    // Send the auth request and start the loading activity
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            if (result == Result.FAILED) {
-                                System.exit(1);
-                            }
-
-                            if (response.getClass() == String.class) {
-                                networkerService.authenticated = false;
-                                networkerService.waitingForResponse = false;
-                                System.exit(1);
-                            }
-
-                            // If authentication was successful...
-                            if (result == Result.SUCCESS) {
-                                networkerService.authenticated = true;
-
-                                // Update the data in the auth file
-                                try {
-                                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "UserData.bin").toPath()));
-                                    oos.writeObject(response);
-                                    oos.flush();
-                                    oos.close();
-
-                                    networkerService.user = (User) response;
-
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-
-                                // Add the notification listen rules
-                                JSONObject friendRequestRuleRequest = new JSONObject();
-                                friendRequestRuleRequest.put("type", RequestType.AddListenRule);
-                                friendRequestRuleRequest.put("data", new ListenRule(RequestType.SendFriendRequest, "RecipientID", networkerService.user.UserID));
-                                networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-                                    @Override
-                                    public void callback(Object response) {
-                                        // Get the friend request from the response object
-                                        FriendRequest friendRequest = (FriendRequest) ((JSONObject) response).get("data");
-
-                                        // Request the user that sent the request from the server
-                                        JSONObject senderRequest = new JSONObject();
-                                        senderRequest.put("type", RequestType.GetUser);
-                                        senderRequest.put("data", new User(friendRequest.SenderID, null, null, null, null, null));
-                                        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                                            @Override
-                                            public void callback(Result result, Object response) {
-                                                if (result == Result.FAILED) {
-                                                    return;
-                                                }
-
-                                                // Cast the response into a user object
-                                                User sender = (User) response;
-                                                // Show the notification
-                                                networkerService.notificationChannel.showNotification("New friend request", sender.DisplayName + " wants to be friends!");
-                                            }
-                                        }, senderRequest));
-                                    }
-                                }, new NetworkerService.IRequestCallback() {
-                                    @Override
-                                    public void callback(Result result, Object response) {
-                                        NetworkerService.IRequestCallback.super.callback(result, response);
-                                    }
-                                }, friendRequestRuleRequest));
-
-                                JSONObject chatRequestRuleRequest = new JSONObject();
-                                chatRequestRuleRequest.put("type", RequestType.AddListenRule);
-                                chatRequestRuleRequest.put("data", new ListenRule(RequestType.SendChatInvite, "RecipientID", networkerService.user.UserID));
-                                networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-                                    @Override
-                                    public void callback(Object response) {
-                                        // Get the chat invite from the request that triggered the listen rule
-                                        ChatInvite chatInvite = (ChatInvite) ((JSONObject) response).get("data");
-
-                                        // Create a new request to get the chat that the user has been invited to
-                                        JSONObject getChatRequest = new JSONObject();
-                                        getChatRequest.put("type", RequestType.GetChat);
-                                        getChatRequest.put("data", new Chat(chatInvite.ChatID, null, null, -1));
-
-                                        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                                            @Override
-                                            public void callback(Result result, Object response) {
-                                                if (result == Result.FAILED) {
-                                                    return;
-                                                }
-
-                                                // Cast the response to a Chat object
-                                                Chat chat = (Chat) response;
-                                                // Show the notification
-                                                networkerService.notificationChannel.showNotification("New chat invitation", "You have been invited to " + chat.Name);
-                                            }
-                                        }, getChatRequest));
-                                    }
-                                }, new NetworkerService.IRequestCallback() {
-                                    @Override
-                                    public void callback(Result result, Object response) {
-                                        NetworkerService.IRequestCallback.super.callback(result, response);
-                                    }
-                                }, chatRequestRuleRequest));
-
-                                File chatsFile = new File(getFilesDir(), "Chats.bin");
-                                if (chatsFile.exists()) {
-                                    try {
-                                        // Get the array of chats
-                                        ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(chatsFile.toPath()));
-                                        Chat[] chats = (Chat[]) ois.readObject();
-
-                                        // Create a listen rule for each of the chats
-                                        for (Chat chat : chats) {
-                                            JSONObject msgRule = new JSONObject();
-                                            msgRule.put("type", RequestType.AddListenRule);
-                                            msgRule.put("data", new ListenRule(RequestType.SendMessage, "ChatID", chat.ChatID));
-                                            Bundle bundle = new Bundle();
-                                            bundle.putSerializable("chat", chat);
-
-                                            networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-                                                @Override
-                                                public void callback(Object response, Bundle bundle) {
-                                                    // Create a notification
-                                                    networkerService.notificationChannel.showNotification("New message", "You have a new message in " + ((Chat) bundle.getSerializable("chat")).Name);
-                                                }
-                                            }, new NetworkerService.IRequestCallback() {
-                                                @Override
-                                                public void callback(Result result, Object response) {
-                                                    NetworkerService.IRequestCallback.super.callback(result, response);
-                                                }
-                                            }, msgRule, bundle));
-                                        }
-
-                                    } catch (IOException | ClassNotFoundException e) {
-                                        e.printStackTrace();
-                                    }
-
-                                }
-                            }
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, authRequest));
-
-                    NewUserActivity.this.runOnUiThread(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE));
-
-                    startActivity(new Intent(NewUserActivity.this, LoadingActivity.class));
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }, request));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(NewUserActivity::addUserCallback, request));
     }
 
     /**
@@ -349,5 +228,68 @@ public class NewUserActivity extends AppCompatActivity {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Callback for the add user request
+     * @param result The result of the request
+     * @param response The server's response from the request, if successful, this will be the new user data
+     */
+    private static void addUserCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            try {
+                android.os.Message msg = android.os.Message.obtain(null, NetworkerService.RESTART_CONNECTION_HANDLER);
+                SharedData.nsMessenger.send(msg);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+
+            ((NewUserActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((NewUserActivity) SharedData.misc.get("activity")).onSubmitButtonClicked((View) SharedData.misc.get("v")));
+        }
+
+        // Check if the response is null
+        // If this is the case then the entry had duplicate data
+        if (response == null) {
+            ((NewUserActivity) SharedData.misc.get("activity")).runOnUiThread(() -> {
+                Toast.makeText(((NewUserActivity) SharedData.misc.get("activity")), "Either your username or display name is already used, try something else.", Toast.LENGTH_SHORT).show();
+                ((NewUserActivity) SharedData.misc.get("activity")).loadingWheel.setVisibility(View.GONE);
+                ((NewUserActivity) SharedData.misc.get("activity")).getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+            });
+            return;
+        }
+
+        // Write the data to the auth file
+        try {
+            ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(((NewUserActivity) SharedData.misc.get("activity")).getFilesDir(), "UserData.bin").toPath()));
+            oos.writeObject(response);
+            oos.flush();
+            oos.close();
+
+            SharedData.user = (User) response;
+
+            oos = new ObjectOutputStream(Files.newOutputStream(new File(((NewUserActivity) SharedData.misc.get("activity")).getFilesDir(), "Chats.bin").toPath()));
+            oos.writeObject(new Chat[0]);
+            oos.flush();
+            oos.close();
+
+            try {
+                android.os.Message msg = android.os.Message.obtain(null, NetworkerService.CLIENT_REGISTER_FOR_EVENTS);
+                msg.replyTo = SharedData.nsReceiver;
+                SharedData.nsMessenger.send(msg);
+
+                msg = android.os.Message.obtain(null, NetworkerService.CLIENT_AUTHENTICATE);
+                SharedData.nsMessenger.send(msg);
+
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+
+            ((NewUserActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((NewUserActivity) SharedData.misc.get("activity")).getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE));
+
+            ((NewUserActivity) SharedData.misc.get("activity")).startActivity(new Intent(((NewUserActivity) SharedData.misc.get("activity")), LoadingActivity.class));
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

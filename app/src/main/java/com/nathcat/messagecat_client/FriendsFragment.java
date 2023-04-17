@@ -5,6 +5,7 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
+import android.os.Messenger;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,66 +41,65 @@ public class FriendsFragment extends Fragment {
 
         LinearLayout container = requireView().findViewById(R.id.FriendsContainer);
 
-        NetworkerService networkerService = ((MainActivity) requireActivity()).networkerService;
-
         // Create a request to get friendships from the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetFriendship);
         request.put("selector", "userID");
-        request.put("data", new Friendship(-1, networkerService.user.UserID, -1, null));
+        request.put("data", new Friendship(-1, SharedData.user.UserID, -1, null));
+        
+        SharedData.misc.put("fragment", this);
+        SharedData.misc.put("container", container);
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    requireActivity().runOnUiThread(() -> Toast.makeText(requireActivity(), "Something went wrong :(", Toast.LENGTH_SHORT));
-                    return;
-                }
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(FriendsFragment::getFriendshipCallback, request));
+    }
 
-                Friendship[] friendships = (Friendship[]) response;
-                ((MainActivity) requireActivity()).friends = new User[friendships.length];
+    //
+    // Callbacks
+    //
 
-                if (friendships.length != 0) {
-                    requireActivity().runOnUiThread(container::removeAllViews);
-                }
+    private static void getFriendshipCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((FriendsFragment) SharedData.misc.get("fragment")).requireActivity(), "Something went wrong :(", Toast.LENGTH_SHORT));
+            return;
+        }
 
-                for (Friendship friendship : friendships) {
-                    JSONObject friendRequest = new JSONObject();
-                    friendRequest.put("type", RequestType.GetUser);
-                    friendRequest.put("selector", "id");
-                    friendRequest.put("data", new User(friendship.FriendID, null, null, null, null, null));
+        Friendship[] friendships = (Friendship[]) response;
+        ((MainActivity) ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity()).friends = new User[friendships.length];
 
-                    networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                        @Override
-                        public void callback(Result result, Object response) {
-                            if (result == Result.FAILED) {
-                                requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT));
-                                return;
-                            }
+        if (friendships.length != 0) {
+            ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(((LinearLayout) SharedData.misc.get("container"))::removeAllViews);
+        }
 
-                            // Add the friend to the friends array
-                            for (int x = 0; x < ((MainActivity) requireActivity()).friends.length; x++) {
-                                if (((MainActivity) requireActivity()).friends[x] == null) {
-                                    ((MainActivity) requireActivity()).friends[x] = (User) response;
-                                    break;
-                                }
-                            }
+        for (Friendship friendship : friendships) {
+            JSONObject friendRequest = new JSONObject();
+            friendRequest.put("type", RequestType.GetUser);
+            friendRequest.put("selector", "id");
+            friendRequest.put("data", new User(friendship.FriendID, null, null, null, null, null));
 
-                            Bundle bundle = new Bundle();
-                            bundle.putSerializable("user", (User) response);
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(FriendsFragment::getFriendshipCallback_addFriendToArray, friendRequest));
+        }
+    }
+    
+    private static void getFriendshipCallback_addFriendToArray(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((FriendsFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT));
+            return;
+        }
 
-                            FriendsFragment.this.getChildFragmentManager().beginTransaction()
-                                    .setReorderingAllowed(true)
-                                    .add(R.id.FriendsContainer, FriendFragment.class, bundle)
-                                    .commit();
-
-                            networkerService.waitingForResponse = false;
-                        }
-                    }, friendRequest));
-                }
-
-                networkerService.waitingForResponse = false;
+        // Add the friend to the friends array
+        for (int x = 0; x < ((MainActivity) ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity()).friends.length; x++) {
+            if (((MainActivity) ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity()).friends[x] == null) {
+                ((MainActivity) ((FriendsFragment) SharedData.misc.get("fragment")).requireActivity()).friends[x] = (User) response;
+                break;
             }
-        }, request));
+        }
+
+        Bundle bundle = new Bundle();
+        bundle.putSerializable("user", (User) response);
+
+        ((FriendsFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
+                .setReorderingAllowed(true)
+                .add(R.id.FriendsContainer, FriendFragment.class, bundle)
+                .commit();
     }
 }

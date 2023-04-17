@@ -5,6 +5,8 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
+import android.os.Messenger;
+import android.os.RemoteException;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,7 +35,6 @@ public class MessagingFragment extends Fragment {
 
     public Chat chat;
     private KeyPair privateKey;
-    private NetworkerService networkerService;
     private MessageQueue messageQueue;
     private int listenRuleId = -1;
 
@@ -48,7 +49,6 @@ public class MessagingFragment extends Fragment {
         // Get the chat argument passed to this fragment, and the networker service instance from
         // the main activity
         chat = (Chat) requireArguments().getSerializable("chat");
-        networkerService = ((MainActivity) requireActivity()).networkerService;
     }
 
     @Override
@@ -69,6 +69,7 @@ public class MessagingFragment extends Fragment {
         requireView().findViewById(R.id.messageSendButtonLoadingWheel).setVisibility(View.GONE);
 
         ((MainActivity) requireActivity()).messagingFragment = this;
+        SharedData.misc.put("fragment", this);
 
         try {
             KeyStore keyStore = new KeyStore(new File(requireActivity().getFilesDir(), "KeyStore.bin"));
@@ -80,45 +81,17 @@ public class MessagingFragment extends Fragment {
 
         assert privateKey != null;
 
-        ((MainActivity) requireActivity()).networkerService.activeChatID = this.chat.ChatID;
+        SharedData.activeChatID = this.chat.ChatID;
 
         // Create the users hashmap and put the current user in it
-        ((MainActivity) requireActivity()).users.put(networkerService.user.UserID, networkerService.user);
-
-        networkerService.waitingForResponse = false;
+        ((MainActivity) requireActivity()).users.put(SharedData.user.UserID, SharedData.user);
 
         // Request the message queue from the server
         JSONObject request = new JSONObject();
         request.put("type", RequestType.GetMessageQueue);
         request.put("data", chat.ChatID);
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                // Check if the request failed
-                if (result == Result.FAILED || response == null) {
-                    requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                    return;
-                }
-
-                // Assign the message queue to the field
-                System.out.println(response);
-                messageQueue = (MessageQueue) response;
-
-                // Call the update message box function on the UI thread
-                // Passing the instance of the fragment class as a parameter
-                try {
-                    requireActivity().runOnUiThread(() -> MessagingFragment.updateMessageBoxStart(MessagingFragment.this, privateKey));
-                    // Hide the loading wheel
-                    requireActivity().runOnUiThread(() -> requireView().findViewById(R.id.messagingLoadingWheel).setVisibility(View.GONE));
-
-                } catch (IllegalStateException e) {
-                    System.out.println("Message window was closed!");
-                    return;
-                }
-                networkerService.waitingForResponse = false;
-            }
-        }, request));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(MessagingFragment::onStart_callback_getMessageQueue, request));
 
 
         // Create the listen rule for messages in this chat
@@ -127,22 +100,44 @@ public class MessagingFragment extends Fragment {
         listenRuleRequest.put("type", RequestType.AddListenRule);
         listenRuleRequest.put("data", listenRule);
 
-        networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-            @Override
-            public void callback(Object response) {
-                updateMessageBox((Message) ((JSONObject) response).get("data"));
-            }
-        }, new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    System.out.println("Failed to create listen rule");
-                    System.exit(1);
-                }
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest(MessagingFragment::onStart_LrCallback_message, MessagingFragment::onStart_callback_messageLrResponse, listenRuleRequest));
+    }
 
-                listenRuleId = (int) response;
-            }
-        }, listenRuleRequest));
+    private static void onStart_callback_getMessageQueue(Result result, Object response) {
+        // Check if the request failed
+        if (result == Result.FAILED || response == null) {
+            ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> Toast.makeText(((MessagingFragment) SharedData.misc.get("fragment")).requireContext(), "Something went wrong :(", Toast.LENGTH_SHORT).show());
+            return;
+        }
+
+        // Assign the message queue to the field
+        System.out.println(response);
+        ((MessagingFragment) SharedData.misc.get("fragment")).messageQueue = (MessageQueue) response;
+
+        // Call the update message box function on the UI thread
+        // Passing the instance of the fragment class as a parameter
+        try {
+            ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(MessagingFragment::updateMessageBoxStart);
+            // Hide the loading wheel
+            ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> ((MessagingFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.messagingLoadingWheel).setVisibility(View.GONE));
+
+        } catch (IllegalStateException e) {
+            System.out.println("Message window was closed!");
+            return;
+        }
+    }
+
+    private static void onStart_LrCallback_message(Object response, Bundle bundle) {
+        updateMessageBox((Message) ((JSONObject) response).get("data"));
+    }
+
+    private static void onStart_callback_messageLrResponse(Result result, Object response) {
+        if (result == Result.FAILED) {
+            System.out.println("Failed to create listen rule");
+            System.exit(1);
+        }
+
+        ((MessagingFragment) SharedData.misc.get("fragment")).listenRuleId = (int) response;
     }
 
     @Override
@@ -153,88 +148,70 @@ public class MessagingFragment extends Fragment {
         request.put("type", RequestType.RemoveListenRule);
         request.put("data", listenRuleId);
 
-        networkerService.SendRequest(new NetworkerService.ListenRuleRequest(new NetworkerService.IListenRuleCallback() {
-            @Override
-            public void callback(Object response) {
-                NetworkerService.IListenRuleCallback.super.callback(response);
-            }
-        }, new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                NetworkerService.IRequestCallback.super.callback(result, response);
-            }
-        }, request));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.ListenRuleRequest((Object response, Bundle bundle) -> {}, (Result result, Object response) -> {}, request));
 
-        ((MainActivity) requireActivity()).networkerService.activeChatID = -1;
+        SharedData.activeChatID = -1;
     }
 
     /**
      * Updates the messagebox with the current contents of the message queue
-     * @param fragment The instance of the current fragment class, this is necessary as this method will mostly be called from a Runnable, which is a static context
      */
-    public static void updateMessageBoxStart(MessagingFragment fragment, KeyPair privateKey) {
-        fragment.networkerService.waitingForResponse = false;
-
+    public static void updateMessageBoxStart() {
         // Remove all messages currently in the messagebox
-        fragment.requireActivity().runOnUiThread(() -> ((LinearLayout) fragment.requireView().findViewById(R.id.MessageBox)).removeAllViews());
+        ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> ((LinearLayout) ((MessagingFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.MessageBox)).removeAllViews());
 
 
         // Add the new messages
         for (int i = 0; i < 50; i++) {
-            while (fragment.networkerService.waitingForResponse) {
+            /*while (fragment.networkerService.waitingForResponse) {
                 System.out.println("Waiting for response");
-            }
+            }*/
 
-            Message message = fragment.messageQueue.Get(i);
+            Message message = ((MessagingFragment) SharedData.misc.get("fragment")).messageQueue.Get(i);
             if (message == null) {
                 continue;
             }
 
             // If the user that sent the message is not currently in the hashmap, request the user from the server and add them
             // Then we can add the message
-            if (((MainActivity) fragment.requireActivity()).users.get(message.SenderID) == null) {
+            if (((MainActivity) ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity()).users.get(message.SenderID) == null) {
                 JSONObject request = new JSONObject();
                 request.put("type", RequestType.GetUser);
                 request.put("selector", "id");
                 request.put("data", new User(message.SenderID, null, null, null, null, null));
 
-                fragment.networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        ((MainActivity) fragment.requireActivity()).users.put(((User) response).UserID, (User) response);
+                NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request((Result result, Object response) -> {
+                    ((MainActivity) ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity()).users.put(((User) response).UserID, (User) response);
 
-                        // Decrypt the message before passing it to the fragment
-                        String content = null;
-                        try {
-                            content = (String) privateKey.decrypt((EncryptedObject) message.Content);
+                    // Decrypt the message before passing it to the fragment
+                    String content = null;
+                    try {
+                        content = (String) ((MessagingFragment) SharedData.misc.get("fragment")).privateKey.decrypt((EncryptedObject) message.Content);
 
-                        } catch (PrivateKeyException e) {
-                            e.printStackTrace();
-                            System.exit(1);
-                        }
-
-                        // Create a new message object with the decrypted contents
-                        Message decryptedMessage = new Message(message.SenderID, message.ChatID, message.TimeSent, content);
-
-                        // Add the message to the view as a fragment
-                        Bundle bundle = new Bundle();
-                        bundle.putSerializable("message", decryptedMessage);
-                        bundle.putBoolean("fromOtherUser", message.SenderID != fragment.networkerService.user.UserID);
-
-                        fragment.getChildFragmentManager().beginTransaction()
-                                .setReorderingAllowed(true)
-                                .add(R.id.MessageBox, MessageFragment.class, bundle)
-                                .commit();
-
-                        fragment.networkerService.waitingForResponse = false;
+                    } catch (PrivateKeyException e) {
+                        e.printStackTrace();
+                        System.exit(1);
                     }
+
+                    // Create a new message object with the decrypted contents
+                    Message decryptedMessage = new Message(message.SenderID, message.ChatID, message.TimeSent, content);
+
+                    // Add the message to the view as a fragment
+                    Bundle bundle = new Bundle();
+                    bundle.putSerializable("message", decryptedMessage);
+                    bundle.putBoolean("fromOtherUser", message.SenderID != SharedData.user.UserID);
+
+                    ((MessagingFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
+                            .setReorderingAllowed(true)
+                            .add(R.id.MessageBox, MessageFragment.class, bundle)
+                            .commit();
                 }, request));
             }
             else {
                 // Decrypt the message contents
                 String content = null;
                 try {
-                    content = (String) privateKey.decrypt((EncryptedObject) message.Content);
+                    content = (String) ((MessagingFragment) SharedData.misc.get("fragment")).privateKey.decrypt((EncryptedObject) message.Content);
 
                 } catch (PrivateKeyException e) {
                     e.printStackTrace();
@@ -244,9 +221,9 @@ public class MessagingFragment extends Fragment {
                 // Add the message to the view as a fragment
                 Bundle bundle = new Bundle();
                 bundle.putSerializable("message", new Message(message.SenderID, message.ChatID, message.TimeSent, content));
-                bundle.putBoolean("fromOtherUser", message.SenderID != fragment.networkerService.user.UserID);
+                bundle.putBoolean("fromOtherUser", message.SenderID != SharedData.user.UserID);
 
-                fragment.getChildFragmentManager().beginTransaction()
+                ((MessagingFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
                         .setReorderingAllowed(true)
                         .add(R.id.MessageBox, MessageFragment.class, bundle)
                         .commit();
@@ -254,30 +231,31 @@ public class MessagingFragment extends Fragment {
         }
 
         // Scroll to the bottom of the scroll view
-        ((ScrollView) fragment.requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN);
+        ((ScrollView) ((MessagingFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN);
     }
 
     /**
      * Updates the message box with the current contents of the chat following the listen rule architecture
+     * @param newMessage The new message that was sent into the chat
      */
-    public void updateMessageBox(Message newMessage) {
+    public static void updateMessageBox(Message newMessage) {
         // If the user that sent the message is not currently in the hashmap, request the user from the server and add them
         // Then we can add the message
-        if (((MainActivity) requireActivity()).users.get(newMessage.SenderID) == null) {
+        if (((MainActivity) ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity()).users.get(newMessage.SenderID) == null) {
             JSONObject request = new JSONObject();
             request.put("type", RequestType.GetUser);
             request.put("selector", "id");
             request.put("data", new User(newMessage.SenderID, null, null, null, null, null));
 
-            networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
+            NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(new NetworkerService.IRequestCallback() {
                 @Override
                 public void callback(Result result, Object response) {
-                    ((MainActivity) requireActivity()).users.put(((User) response).UserID, (User) response);
+                    ((MainActivity) ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity()).users.put(((User) response).UserID, (User) response);
 
                     // Decrypt the message before passing it to the fragment
                     String content = null;
                     try {
-                        content = (String) privateKey.decrypt((EncryptedObject) newMessage.Content);
+                        content = (String) ((MessagingFragment) SharedData.misc.get("fragment")).privateKey.decrypt((EncryptedObject) newMessage.Content);
 
                     } catch (PrivateKeyException e) {
                         e.printStackTrace();
@@ -290,15 +268,15 @@ public class MessagingFragment extends Fragment {
                     // Add the message to the view as a fragment
                     Bundle bundle = new Bundle();
                     bundle.putSerializable("message", decryptedMessage);
-                    bundle.putBoolean("fromOtherUser", newMessage.SenderID != networkerService.user.UserID);
+                    bundle.putBoolean("fromOtherUser", newMessage.SenderID != SharedData.user.UserID);
 
-                    getChildFragmentManager().beginTransaction()
+                    ((MessagingFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
                             .setReorderingAllowed(true)
                             .add(R.id.MessageBox, MessageFragment.class, bundle)
                             .commit();
 
                     // Scroll to the bottom of the scroll view
-                    requireActivity().runOnUiThread(() -> ((ScrollView) requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN));
+                    ((MessagingFragment) SharedData.misc.get("fragment")).requireActivity().runOnUiThread(() -> ((ScrollView) ((MessagingFragment) SharedData.misc.get("fragment")).requireView().findViewById(R.id.MessageBoxScrollView)).fullScroll(View.FOCUS_DOWN));
                 }
             }, request));
         }
@@ -306,7 +284,7 @@ public class MessagingFragment extends Fragment {
             // Decrypt the contents of the message
             String content = null;
             try {
-                content = (String) privateKey.decrypt((EncryptedObject) newMessage.Content);
+                content = (String) ((MessagingFragment) SharedData.misc.get("fragment")).privateKey.decrypt((EncryptedObject) newMessage.Content);
 
             } catch (PrivateKeyException e) {
                 e.printStackTrace();
@@ -316,9 +294,9 @@ public class MessagingFragment extends Fragment {
             // Add the message to the view as a fragment
             Bundle bundle = new Bundle();
             bundle.putSerializable("message", new Message(newMessage.SenderID, newMessage.ChatID, newMessage.TimeSent, content));
-            bundle.putBoolean("fromOtherUser", newMessage.SenderID != networkerService.user.UserID);
+            bundle.putBoolean("fromOtherUser", newMessage.SenderID != SharedData.user.UserID);
 
-            getChildFragmentManager().beginTransaction()
+            ((MessagingFragment) SharedData.misc.get("fragment")).getChildFragmentManager().beginTransaction()
                     .setReorderingAllowed(true)
                     .add(R.id.MessageBox, MessageFragment.class, bundle)
                     .commit();

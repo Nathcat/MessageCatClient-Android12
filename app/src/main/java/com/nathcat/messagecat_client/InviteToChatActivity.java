@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Messenger;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -36,17 +37,14 @@ public class InviteToChatActivity extends AppCompatActivity {
     private ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            networkerService = ((NetworkerService.NetworkerServiceBinder) iBinder).getService();
+            SharedData.nsMessenger = new Messenger(iBinder);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            networkerService = null;
+            SharedData.nsMessenger = null;
         }
     };
-
-    private NetworkerService networkerService;
-    private User userToInvite;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,14 +58,14 @@ public class InviteToChatActivity extends AppCompatActivity {
                 BIND_AUTO_CREATE
         );
 
-        // The user that is being invited to a chat should be passed to this activity as a bundle
-        userToInvite = (User) getIntent().getSerializableExtra("userToInvite");
-
         // Add the chats fragment view
         getSupportFragmentManager().beginTransaction()
                 .setReorderingAllowed(true)
                 .add(R.id.InviteToChatChatsContainer, ChatsFragment.class, null)
                 .commit();
+
+
+        SharedData.misc.put("activity", this);
     }
 
     /**
@@ -136,23 +134,10 @@ public class InviteToChatActivity extends AppCompatActivity {
         // Create and send the request
         JSONObject request = new JSONObject();
         request.put("type", RequestType.SendChatInvite);
-        request.put("data", new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1));
+        request.put("data", new ChatInvite(-1, chat.ChatID, SharedData.user.UserID, ((User) SharedData.misc.get("userToInvite")).UserID, new Date().getTime(), -1));
         request.put("keyPair", new KeyPair(null, pair.pri));
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    InviteToChatActivity.this.runOnUiThread(() -> Toast.makeText(InviteToChatActivity.this, "Something went wrong :(", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
-
-                Toast.makeText(InviteToChatActivity.this, "Sent chat invite!", Toast.LENGTH_SHORT).show();
-
-                // Go back to the main activity
-                InviteToChatActivity.this.runOnUiThread(() -> startActivity(new Intent(InviteToChatActivity.this, MainActivity.class)));
-            }
-        }, request));
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(InviteToChatActivity::sendChatInviteCallback, request));
     }
 
     /**
@@ -187,70 +172,74 @@ public class InviteToChatActivity extends AppCompatActivity {
         request.put("data", new Chat(-1, chatName, chatDesc, -1));
         request.put("keyPair", new KeyPair(chatKeyPair.pub, null));
 
-        networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-            @Override
-            public void callback(Result result, Object response) {
-                if (result == Result.FAILED) {
-                    InviteToChatActivity.this.runOnUiThread(() -> Toast.makeText(InviteToChatActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
+        SharedData.misc.put("chatKeyPair", chatKeyPair);
 
-                // Get the chat from the response
-                Chat chat = (Chat) response;
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(InviteToChatActivity::createNewChatCallback, request));
+    }
 
-                try {
-                    // Open the chats file and read the current chat array
-                    ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(getFilesDir(), "Chats.bin").toPath()));
-                    Chat[] chats = (Chat[]) ois.readObject();
-                    ois.close();
+    //
+    // Callbacks
+    //
 
-                    // Add the new chat to the array
-                    Chat[] newChats = new Chat[chats.length + 1];
-                    System.arraycopy(chats, 0, newChats, 0, chats.length);
-                    newChats[chats.length] = chat;
+    private static void createNewChatCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((InviteToChatActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
 
-                    // Write the new array to the chats file
-                    ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(getFilesDir(), "Chats.bin").toPath()));
-                    oos.writeObject(newChats);
-                    oos.flush();
-                    oos.close();
+        // Get the chat from the response
+        Chat chat = (Chat) response;
 
-                    // Open the key store and add the new key pair
-                    KeyStore keyStore = new KeyStore(new File(getFilesDir(), "KeyStore.bin"));
-                    if (keyStore.AddKeyPair(chat.PublicKeyID, chatKeyPair) == Result.FAILED) {
-                        InviteToChatActivity.this.runOnUiThread(() -> Toast.makeText(InviteToChatActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                        System.exit(1);
-                    }
+        try {
+            // Open the chats file and read the current chat array
+            ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(new File(((InviteToChatActivity) SharedData.misc.get("activity")).getFilesDir(), "Chats.bin").toPath()));
+            Chat[] chats = (Chat[]) ois.readObject();
+            ois.close();
 
-                } catch (IOException | ClassNotFoundException e) {
-                    e.printStackTrace();
-                    InviteToChatActivity.this.runOnUiThread(() -> Toast.makeText(InviteToChatActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                    System.exit(1);
-                }
+            // Add the new chat to the array
+            Chat[] newChats = new Chat[chats.length + 1];
+            System.arraycopy(chats, 0, newChats, 0, chats.length);
+            newChats[chats.length] = chat;
 
-                // Send a chat invite
-                JSONObject inviteRequest = new JSONObject();
-                inviteRequest.put("type", RequestType.SendChatInvite);
-                inviteRequest.put("data", new ChatInvite(-1, chat.ChatID, networkerService.user.UserID, userToInvite.UserID, new Date().getTime(), -1));
-                inviteRequest.put("keyPair", new KeyPair(null, chatKeyPair.pri));
+            // Write the new array to the chats file
+            ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(new File(((InviteToChatActivity) SharedData.misc.get("activity")).getFilesDir(), "Chats.bin").toPath()));
+            oos.writeObject(newChats);
+            oos.flush();
+            oos.close();
 
-                networkerService.SendRequest(new NetworkerService.Request(new NetworkerService.IRequestCallback() {
-                    @Override
-                    public void callback(Result result, Object response) {
-                        if (result == Result.FAILED) {
-                            InviteToChatActivity.this.runOnUiThread(() -> Toast.makeText(InviteToChatActivity.this, "Something went wrong!", Toast.LENGTH_SHORT).show());
-                            System.exit(1);
-                        }
-
-                        InviteToChatActivity.this.runOnUiThread(() -> {
-                            Toast.makeText(InviteToChatActivity.this, "Sent chat invite!", Toast.LENGTH_SHORT).show();
-
-                            // Go back to the main activity
-                            InviteToChatActivity.this.runOnUiThread(() -> startActivity(new Intent(InviteToChatActivity.this, MainActivity.class)));
-                        });
-                    }
-                }, inviteRequest));
+            // Open the key store and add the new key pair
+            KeyStore keyStore = new KeyStore(new File(((InviteToChatActivity) SharedData.misc.get("activity")).getFilesDir(), "KeyStore.bin"));
+            if (keyStore.AddKeyPair(chat.PublicKeyID, ((KeyPair) SharedData.misc.get("chatKeyPair"))) == Result.FAILED) {
+                ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((InviteToChatActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+                System.exit(1);
             }
-        }, request));
+
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((InviteToChatActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        // Send a chat invite
+        JSONObject inviteRequest = new JSONObject();
+        inviteRequest.put("type", RequestType.SendChatInvite);
+        inviteRequest.put("data", new ChatInvite(-1, chat.ChatID, SharedData.user.UserID, ((User) SharedData.misc.get("userToInvite")).UserID, new Date().getTime(), -1));
+        inviteRequest.put("keyPair", new KeyPair(null,((KeyPair) SharedData.misc.get("chatKeyPair")).pri));
+
+        NetworkerService.SendRequest(SharedData.nsMessenger, new NetworkerService.Request(InviteToChatActivity::sendChatInviteCallback, inviteRequest));
+    }
+
+    private static void sendChatInviteCallback(Result result, Object response) {
+        if (result == Result.FAILED) {
+            ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> Toast.makeText(((InviteToChatActivity) SharedData.misc.get("activity")), "Something went wrong!", Toast.LENGTH_SHORT).show());
+            System.exit(1);
+        }
+
+        ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> {
+            Toast.makeText(((InviteToChatActivity) SharedData.misc.get("activity")), "Sent chat invite!", Toast.LENGTH_SHORT).show();
+
+            // Go back to the main activity
+            ((InviteToChatActivity) SharedData.misc.get("activity")).runOnUiThread(() -> ((InviteToChatActivity) SharedData.misc.get("activity")).startActivity(new Intent(((InviteToChatActivity) SharedData.misc.get("activity")), MainActivity.class)));
+        });
     }
 }
